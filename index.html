@@ -689,8 +689,9 @@
               const parts = trimmed.split(/,|\s+/).filter(Boolean);
               const dateStr = parts[0];
 
-              // [FIX 3] Kenneth French 5-Factor 일별 파일 헤더 컬럼 정밀 파싱
-              // (구조: Date, Mkt-RF, SMB, HML, RMW, CMA, RF)
+              // [수정 반영] Kenneth French 일별 CSV 헤더 및 컬럼 수에 맞춘 정밀 파싱
+              // 5-Factor 규격: [Date, Mkt-RF, SMB, HML, RMW, CMA, RF] -> 총 7개 컬럼 (RF는 Index 6)
+              // 3-Factor 규격: [Date, Mkt-RF, SMB, HML, RF] -> 총 5개 컬럼 (RF는 Index 4)
               if (/^\d{8}$/.test(dateStr)) {
                 const yyyy = dateStr.substring(0, 4);
                 const mm = dateStr.substring(4, 6);
@@ -706,11 +707,13 @@
                   let rf = 0;
                   if (parts.length >= 7) {
                     rf = parseFloat(parts[6]) / 100.0 || 0;
-                  } else if (parts.length >= 5) {
+                  } else if (parts.length === 5) {
                     rf = parseFloat(parts[4]) / 100.0 || 0;
+                  } else if (parts.length > 5) {
+                    // 예외적인 컬럼 수인 경우 마지막 항목을 RF로 세이프가드 처리
+                    rf = parseFloat(parts[parts.length - 1]) / 100.0 || 0;
                   }
 
-                  // 5-Factor 파일의 parts[4]는 RMW이므로 MOM과 혼동되지 않도록 0.0으로 명시 처리
                   const mom = 0.0; 
                   factorMap.set(formattedDate, { mktRf, smb, hml, mom, rf });
                 }
@@ -993,7 +996,6 @@
         return { accumulatedGain, totalSharesSold };
       }
 
-      // [FIX 4] 세금 납부 현금 부족 시 필요한 원화 금액만큼 주식을 매도 청산하는 전용 메서드
       liquidateForAmount(requiredKrw, currentPriceUsd, currentFxRate, friction) {
         const netSellFxPrice = currentPriceUsd * currentFxRate * (1 - friction);
         if (netSellFxPrice <= 0) return 0;
@@ -1713,7 +1715,6 @@
         return 0;
       }
 
-      // [FIX 4] 세금 체계 및 현금 부족 시 청산 로직 수정
       static processTaxHarvesting(taxLotMgr, currentValKrw, priceUsd, fx, fxSpreadRate, yearRealizedGainKrw, TAX_LIMIT, cashKrw) {
         let updatedGain = yearRealizedGainKrw;
         let updatedCash = cashKrw;
@@ -1953,7 +1954,7 @@
           results[ticker].score = QuantScoreEngine.calculateScore(results[ticker], periodMonths, avgRfAnnPercent);
         }
 
-        // [FIX 1 & FIX 2] 커스텀 믹스 전략 연산 루프 (배당금 반영 + 리밸런싱 슬리피지 정확화)
+        // 커스텀 믹스 전략 연산 루프
         for (let mIdx = 0; mIdx < customMixes.length; mIdx++) {
           await new Promise(resolve => setTimeout(resolve, 0));
 
@@ -1988,7 +1989,6 @@
             const dateStr = sortedDates[i];
             const fx = fxPrices[i];
 
-            // [FIX 1] 커스텀 믹스 보유 종목 배당 수령 및 재투자
             mixTickers.forEach(t => {
               const divMap = processedDivs[t];
               if (divMap && divMap.has(dateStr) && mixShares[t] > 0) {
@@ -2043,7 +2043,6 @@
               const doRebalance = mix.rebalanceFreq === 'monthly' || (mix.rebalanceFreq === 'yearly' && isYearEnd[i]);
               let totalPortfolioKrw = todayTotalValBeforeDeposit + depositKrw;
 
-              // [FIX 2] 정교한 리밸런싱 매매 마찰 비용 차감
               if (doRebalance) {
                 let rebalanceFrictionCostKrw = 0;
                 mixTickers.forEach(t => {

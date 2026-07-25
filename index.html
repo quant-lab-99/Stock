@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ETF 적립식 백테스트 계산기 v14.3 Pro</title>
+  <title>ETF 적립식 백테스트 계산기 v15.0 Pro</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -17,7 +17,6 @@
     @keyframes slideIn { from { transform: translateY(-100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
     .sortable-th { cursor: pointer; user-select: none; white-space: nowrap; }
     .sortable-th:hover { background-color: #1e293b; }
-    /* 스티키 컬럼 전용 그림자 및 모바일 최적화 */
     .sticky-col-shadow { box-shadow: 4px 0 8px -2px rgba(0, 0, 0, 0.5); }
   </style>
 </head>
@@ -31,10 +30,10 @@
     <header class="border-b border-slate-800 pb-4 flex justify-between items-center flex-wrap gap-2">
       <div>
         <h1 class="text-xl sm:text-2xl font-bold text-emerald-400 flex items-center gap-2">
-          📈 ETF 적립식 백테스트 계산기 <span class="text-xs font-normal text-emerald-300 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800">v14.3 Pro</span>
+          📈 ETF 적립식 백테스트 계산기 <span class="text-xs font-normal text-emerald-300 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800">v15.0 Pro Engine</span>
         </h1>
         <p class="text-slate-400 text-xs mt-1">
-          미국 주요 ETF 적립식·거치식 성과 분석 및 퀀트 포트폴리오 시뮬레이터
+          미국 주요 ETF 적립식·거치식 성과 분석 및 차세대 퀀트 포트폴리오 시뮬레이터
         </p>
       </div>
       <div id="engineStatus" class="text-xs px-2.5 py-1 rounded bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-2 whitespace-nowrap">
@@ -43,26 +42,26 @@
       </div>
     </header>
 
-    <!-- 가성비 & 고통 지수 가이드 -->
+    <!-- 핵심 가이드 -->
     <div class="bg-slate-900/90 border border-emerald-500/30 rounded-xl p-3 sm:p-4 space-y-2 text-xs">
-      <div class="flex justify-between items-center cursor-pointer" onclick="UIController.toggleBeginnerGuide()" role="button" aria-label="핵심 가성비 가이드 토글">
+      <div class="flex justify-between items-center cursor-pointer" onclick="UIController.toggleBeginnerGuide()" role="button" aria-label="핵심 가이드 토글">
         <span class="font-bold text-emerald-400 flex items-center gap-1.5 whitespace-nowrap">
-          💡 한눈에 보는 퀀트 종합점수 및 핵심 지표 가이드
+          💡 차세대 v15.0 Pro 4축 종합점수 및 핵심 지표 가이드
         </span>
         <span id="guideToggleIcon" class="text-slate-400 font-bold whitespace-nowrap">▲ 접기</span>
       </div>
       <div id="beginnerGuideContent" class="grid grid-cols-1 md:grid-cols-3 gap-2.5 pt-2 text-slate-300 border-t border-slate-800">
         <div class="bg-slate-950/60 p-2.5 rounded border border-slate-800">
-          <span class="font-bold text-amber-400 block mb-1">🏆 시그모이드 종합점수</span>
-          수익성(XIRR), 순수 하락 위험(소티노), 회복력(칼마), 마음고통(Ulcer), 최악 손실(CVaR) 및 검증 기간을 <span class="text-emerald-300 font-semibold">100점 만점 입체 평가</span>합니다.
+          <span class="font-bold text-amber-400 block mb-1">🏆 4축 직교화 종합점수</span>
+          수익성(XIRR), Bounded 하방효율(Sortino/Calmar), RMS 직교 고통위험(Ulcer/CVaR 중복감점 제거), 몬테카를로 경로안정성을 <span class="text-emerald-300 font-semibold">100점 만점 평가</span>합니다.
         </div>
         <div class="bg-slate-950/60 p-2.5 rounded border border-slate-800">
           <span class="font-bold text-cyan-400 block mb-1">📈 실질 연복리 수익률 (XIRR)</span>
           월별 실제 입출금 날짜의 현금흐름과 세금 차감을 정밀 반영한 <span class="text-cyan-300 font-semibold">진짜 적립식 연복리 수익률</span>입니다.
         </div>
         <div class="bg-slate-950/60 p-2.5 rounded border border-slate-800">
-          <span class="font-bold text-rose-400 block mb-1">🛡️ MDD & 마음 고통 (Ulcer & CVaR)</span>
-          최대 낙폭(MDD)과 계좌가 전고점에 물려있는 <span class="text-rose-300 font-semibold">고통 시간(Ulcer) 및 최악 상위 5% 손실(CVaR)</span>을 측정합니다.
+          <span class="font-bold text-rose-400 block mb-1">🎲 몬테카를로 경로 생존력</span>
+          10,000회 무작위 시뮬레이션을 통해 계좌의 <span class="text-rose-300 font-semibold">순서 위험(Sequence Risk) 및 하위 5% 생존율</span>을 점수에 결합합니다.
         </div>
       </div>
     </div>
@@ -348,7 +347,7 @@
             </th>
             <th onclick="UIController.handleSort('score')" class="px-3 py-3 text-amber-400 sortable-th whitespace-nowrap">
               종합 점수 🏆
-              <button onclick="event.stopPropagation(); UIController.showMetricInfo('종합 점수 🏆', '시그모이드 다모형 알고리즘을 사용하여 수익성(XIRR), 순수하락 효율(소티노), 회복력(칼마), 마음고통(Ulcer), 최악손실(CVaR), 검증 기간 신뢰도를 종합 산출한 100점 만점 성과 점수입니다.')" class="text-amber-500/80 hover:text-amber-300 text-[11px] ml-0.5" title="도움말">ℹ️</button>
+              <button onclick="event.stopPropagation(); UIController.showMetricInfo('종합 점수 🏆', 'v15.0 Pro 4축 직교화 알고리즘: 수익성(XIRR), Bounded 하방효율(Sortino/Calmar), RMS 직교 고통위험(Ulcer/CVaR 중복감점 제거), 몬테카를로 경로안정성(P5/P50)을 통합 평가한 100점 만점 점수입니다.')" class="text-amber-500/80 hover:text-amber-300 text-[11px] ml-0.5" title="도움말">ℹ️</button>
               <span id="sort-score">▼</span>
             </th>
             <th onclick="UIController.handleSort('investedKrw')" class="px-3 py-3 sortable-th whitespace-nowrap">
@@ -433,13 +432,13 @@
   <script>
     'use strict';
 
-    // 0. Supabase 데이터베이스 연결 설정
+    // Supabase 데이터베이스 연결 설정
     const SUPABASE_URL = "https://rqgbkqztalsgldhhqxhm.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable_z0y33AMk8uO_c75oTD-qMg_8kXsOhvk";
 
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // 1. 글로벌 설정
+    // 글로벌 설정
     const GLOBAL_QUANT_CONFIG = {
       TAX_RATE: 0.22,
       TAX_ALLOWANCE_KRW: 2500000.0,
@@ -448,8 +447,7 @@
       CORS_WORKER_PROXY: "https://my-yahoo-proxy.rlfhdzk.workers.dev/?url="
     };
 
-    // Solution A: S&P Dow Jones 공식 S&P 500 Momentum TR Index 역사적 월별 초과 수익률 테이블 (1994년 12월 ~ 2017년 10월)
-    // S&P 500 (SPY) 대비 월별 팩터 알파 (%)
+    // S&P 500 Momentum TR Index 역사적 월별 초과 수익률 테이블 (1994-12 ~ 2017-10)
     const SPMO_OFFICIAL_MONTHLY_ALPHA = {
       '1995-01': 0.008, '1995-02': 0.005, '1995-03': 0.012, '1995-04': 0.003, '1995-05': 0.015, '1995-06': 0.002,
       '1995-07': 0.010, '1995-08': 0.004, '1995-09': 0.018, '1995-10': -0.005, '1995-11': 0.006, '1995-12': 0.011,
@@ -578,7 +576,6 @@
         `;
 
         container.appendChild(toast);
-
         const displayTime = type === 'warning' ? 15000 : 5000;
 
         if (autoClose) {
@@ -613,7 +610,7 @@
     };
 
     class QuantDataCache {
-      static dbName = "QuantBacktestCacheDB_v14_3";
+      static dbName = "QuantBacktestCacheDB_v15_0";
       static storeName = "timeSeriesStore";
       static TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -662,14 +659,13 @@
 
     class KennethFrenchFetcher {
       static async fetchOfficialFactors(startYear, endYear) {
-        const cacheKey = `FF_FACTORS_${startYear}_${endYear}_v14_3_REAL_CSV`;
+        const cacheKey = `FF_FACTORS_${startYear}_${endYear}_v15_0_REAL_CSV`;
         const cached = await QuantDataCache.get(cacheKey);
         if (cached && cached.entries && cached.entries.length > 0) {
           return new Map(cached.entries);
         }
 
         const factorMap = new Map();
-
         const csvUrls = [
           "https://raw.githubusercontent.com/PacktPublishing/Quantitative-Finance-with-R/master/Datasets/F-F_Research_Data_5_Factors_2x3_daily.CSV",
           "https://raw.githubusercontent.com/ashgreat/datasets/master/F-F_Research_Data_5_Factors_2x3_daily.csv"
@@ -710,7 +706,6 @@
                   }
 
                   const mom = parts[4] && parts.length === 5 ? (parseFloat(parts[4]) / 100.0 || 0) : 0;
-
                   factorMap.set(formattedDate, { mktRf, smb, hml, mom, rf });
                 }
               }
@@ -721,10 +716,9 @@
               return factorMap;
             }
           } catch (err) {
-            console.warn(`[KennethFrenchFetcher] Fama-French CSV 수신/파싱 실패 (${url}):`, err);
+            console.warn(`[KennethFrenchFetcher] CSV 수신 실패 (${url}):`, err);
           }
         }
-
         return null;
       }
     }
@@ -742,16 +736,11 @@
       }
 
       static getSOFR(dateInput) {
-        if (typeof dateInput === 'string') {
-          if (this.dynamicRates.has(dateInput)) {
-            return this.dynamicRates.get(dateInput);
-          }
+        if (typeof dateInput === 'string' && this.dynamicRates.has(dateInput)) {
+          return this.dynamicRates.get(dateInput);
         }
 
-        const year = typeof dateInput === 'string'
-          ? parseInt(dateInput.split('-')[0], 10)
-          : dateInput;
-
+        const year = typeof dateInput === 'string' ? parseInt(dateInput.split('-')[0], 10) : dateInput;
         if (year >= 2026) return 0.041;
         if (year === 2025) return 0.043;
         if (year === 2024) return 0.053;
@@ -1005,7 +994,7 @@
 
     class YahooFinanceFetcher {
       static async fetchChartData(ticker, startYear, endYear) {
-        const cacheKey = `${ticker}_${startYear}_${endYear}_v14_3`;
+        const cacheKey = `${ticker}_${startYear}_${endYear}_v15_0`;
         const cached = await QuantDataCache.get(cacheKey);
         if (cached) {
           return {
@@ -1077,7 +1066,11 @@
     class BrentXIRRSolver {
       static computeXIRR(cashFlows, finalVal, dates) {
         const m = cashFlows.length;
-        if (m === 0 || isNaN(finalVal) || finalVal <= GLOBAL_QUANT_CONFIG.EPSILON_PRECISION) return -100.0;
+        
+        // dates 배열의 길이가 (cashFlows.length + 1) 인지 안전성 검증
+        if (m === 0 || !dates || dates.length !== m + 1 || isNaN(finalVal) || finalVal <= GLOBAL_QUANT_CONFIG.EPSILON_PRECISION) {
+          return -100.0;
+        }
 
         const totalInflow = cashFlows.reduce((a, b) => a + b, 0);
         if (totalInflow <= 0) return 0.0;
@@ -1213,16 +1206,23 @@
               }
 
               if (baseCurr > 0 && basePrev > 0) {
-                const simpleBaseReturn = (baseCurr - basePrev) / basePrev;
                 let synthSimpleReturn = 0.0;
 
-                if (config.proxyType === 'official_embedded_index') {
-                  // Solution A 적용: S&P 500 Momentum Index 역사적 공식 월별 알파 적용
+                // ^TYX, ^TNX 등 국채 금리 지수를 베이스로 쓰는 ETF (TLT 등) 금리-가격 역관계 정밀 보정
+                if (config.base === '^TYX' || config.base === '^TNX' || config.base === '^TYX=F') {
+                  const deltaYield = (baseCurr - basePrev) / 100.0; // 금리 변동폭
+                  const modDuration = 17.5; // TLT 20년+ 국채 평균 수정 듀레이션
+                  synthSimpleReturn = (-modDuration * deltaYield) - (config.fee / 252);
+                } 
+                else if (config.proxyType === 'official_embedded_index') {
                   const mStr = dateStr.substring(0, 7);
                   const monthlyAlpha = SPMO_OFFICIAL_MONTHLY_ALPHA[mStr] || 0.005;
                   const dailyAlpha = monthlyAlpha / 21.0;
+                  const simpleBaseReturn = (baseCurr - basePrev) / basePrev;
                   synthSimpleReturn = simpleBaseReturn + dailyAlpha - (config.fee / 252);
-                } else if (config.proxyType === 'leveraged') {
+                } 
+                else if (config.proxyType === 'leveraged') {
+                  const simpleBaseReturn = (baseCurr - basePrev) / basePrev;
                   const sofr = HistoricalInterestRates.getSOFR(dateStr);
                   const lev = config.leverage;
                   const swapSpread = config.swapSpread || 0.0045;
@@ -1233,7 +1233,9 @@
 
                   synthSimpleReturn = (lev * simpleBaseReturn) - repoCostDaily - expenseDaily;
                   synthSimpleReturn = Math.max(-0.999, synthSimpleReturn);
-                } else {
+                } 
+                else {
+                  const simpleBaseReturn = (baseCurr - basePrev) / basePrev;
                   synthSimpleReturn = simpleBaseReturn - (config.fee / 252);
                 }
 
@@ -1442,6 +1444,9 @@
       }
     }
 
+    /**
+     * v15.0 Pro 차세대 4축 직교화 퀀트 스코어링 엔진
+     */
     class QuantScoreEngine {
       static calculatePeriodMonths(startMonth, endMonth) {
         const [sY, sM] = startMonth.split('-').map(Number);
@@ -1459,32 +1464,50 @@
         if (!res) return 0;
 
         const xirr = res.annualizedXIRR || 0;
-        const sortino = Math.max(0, res.sortino || 0);
+        const sortino = Math.max(0, isNaN(res.sortino) ? 0 : res.sortino);
         const mdd = Math.abs(res.twrMdd || 0);
-        const calmar = mdd > 0 ? Math.min(10, xirr / mdd) : 0;
-        const ulcer = Math.max(0, res.ulcerIndex || 0);
-        const cvar95 = Math.max(0, res.cvar95 || 0);
+        const ulcer = Math.max(0, isNaN(res.ulcerIndex) ? 0 : res.ulcerIndex);
+        const cvar95 = Math.max(0, isNaN(res.cvar95) ? 0 : res.cvar95);
+        const infoRatio = isNaN(res.informationRatio) ? 0 : res.informationRatio;
 
-        const erp = 7.0;
-        const x0 = Math.max(5.0, avgRfAnnPercent + erp);
+        // 1. 수익성 점수 (S_ret: 최대 35점) - Rf 대비 초과수익률 기반 시그모이드
+        const excessReturn = xirr - avgRfAnnPercent;
+        let sReturn = 0;
+        if (xirr <= 0) {
+          sReturn = Math.max(0, 10 * (1 + xirr / 100));
+        } else {
+          sReturn = 35.0 * (2.0 / (1.0 + Math.exp(-0.08 * excessReturn)) - 1.0);
+          sReturn = Math.max(0, Math.min(35.0, sReturn));
+        }
 
-        const sReturn = 45.0 / (1.0 + Math.exp(-0.12 * (xirr - x0)));
+        // 2. 하방 효율성 점수 (S_down: 최대 25점) - Sortino + Bounded Calmar 직교 합성
+        const boundedCalmar = (xirr > avgRfAnnPercent) ? (excessReturn / Math.max(1.0, mdd)) : 0;
+        const downsideEfficiency = 0.6 * Math.min(5.0, sortino) + 0.4 * Math.min(5.0, boundedCalmar);
+        const sDownside = 25.0 * (1.0 - Math.exp(-0.55 * downsideEfficiency));
 
-        const sSortino = Math.min(30.0, 30.0 / (1.0 + Math.exp(-1.0 * (sortino - 1.5))));
-        const sCalmar = Math.min(25.0, 25.0 / (1.0 + Math.exp(-1.5 * (calmar - 0.5))));
-        const sRiskAdj = sSortino + sCalmar; 
+        // 3. 직교화 하락 스트레스 감점 (P_stress: 최대 20점 차감) - Ulcer & CVaR의 RMS 결합
+        const normUlcer = ulcer / 12.0;
+        const normCvar = cvar95 / 25.0;
+        const rmsStress = Math.sqrt(0.5 * Math.pow(normUlcer, 2) + 0.5 * Math.pow(normCvar, 2));
+        const pStress = 20.0 * (1.0 - Math.exp(-1.4 * rmsStress));
 
-        const pUlcer = 15.0 * (1.0 - Math.exp(-0.12 * ulcer));
-        const pCvar = cvar95 > 2.0 ? 12.0 * (1.0 - Math.exp(-0.10 * (cvar95 - 2.0))) : 0;
-        const pTotal = pUlcer + pCvar;
+        // 4. 몬테카를로 경로 생존점수 (S_mc: 최대 15점) - Sequence of Returns Risk 직접 결합
+        let sMonteCarlo = 7.5;
+        if (res.monteCarlo && res.monteCarlo.p50 > 0) {
+          const p5 = res.monteCarlo.p5;
+          const p50 = res.monteCarlo.p50;
+          const mcRatio = Math.max(0, p5 / p50);
+          sMonteCarlo = 15.0 * Math.min(1.0, Math.max(0, mcRatio / 0.60));
+        }
 
-        const fTime = Math.pow(Math.max(12, periodMonths) / 180.0, 0.20);
+        // 5. 벤치마크 알파 / 정보비율 점수 (S_alpha: 최대 10점)
+        const sAlpha = 10.0 / (1.0 + Math.exp(-0.7 * infoRatio));
 
-        const returnFactor = xirr >= 0 ? 1.0 : 0.3;
+        // 6. 종합 점수 및 표본 신뢰도 보정 (F_time)
+        const rawScore = Math.max(0, (sReturn + sDownside + sMonteCarlo + sAlpha) - pStress);
+        const fTime = Math.min(1.0, Math.sqrt(Math.max(1, periodMonths) / 36.0));
 
-        const rawScore = (sReturn + sRiskAdj * returnFactor) - pTotal;
         const finalScore = Math.max(0, Math.min(100, rawScore * fTime));
-
         return Math.round(finalScore * 10) / 10;
       }
     }
@@ -2033,71 +2056,73 @@
 
         if (onProgress) onProgress(80);
         
+        // 몬테카를로 연산 결과를 종합 점수에 최종 재반영 (Sequence Risk 결합)
         const mcBatchResults = await WorkerManager.runMonteCarloBatchAsync(tasksForMonteCarlo, onProgress);
         Object.keys(mcBatchResults).forEach(key => {
-          if (results[key]) results[key].monteCarlo = mcBatchResults[key];
+          if (results[key]) {
+            results[key].monteCarlo = mcBatchResults[key];
+            results[key].score = QuantScoreEngine.calculateScore(results[key], periodMonths, avgRfAnnPercent);
+          }
         });
 
         if (onProgress) onProgress(100);
-
         return results;
       }
     }
 
-class ReactiveStore {
-  constructor(initialData, onChange) {
-    this.onChange = onChange;
-    this.silentSync = false;
-    this.notifyPending = false; // 중복 호출 방지 플래그
-    this.state = this._makeReactive(initialData);
-  }
-
-  // 상태 변경 이벤트를 마이크로태스크 큐로 병합 처리
-  notify() {
-    if (this.silentSync) {
-      try {
-        localStorage.setItem('quant_custom_mixes_v14_3', JSON.stringify(this.state));
-      } catch(e) {
-        console.error("[ReactiveStore] Storage Write Failed", e);
+    class ReactiveStore {
+      constructor(initialData, onChange) {
+        this.onChange = onChange;
+        this.silentSync = false;
+        this.notifyPending = false;
+        this.state = this._makeReactive(initialData);
       }
-      return;
+
+      notify() {
+        if (this.silentSync) {
+          try {
+            localStorage.setItem('quant_custom_mixes_v15_0', JSON.stringify(this.state));
+          } catch(e) {
+            console.error("[ReactiveStore] Storage Write Failed", e);
+          }
+          return;
+        }
+
+        if (this.notifyPending) return;
+        this.notifyPending = true;
+
+        queueMicrotask(() => {
+          this.notifyPending = false;
+          try {
+            localStorage.setItem('quant_custom_mixes_v15_0', JSON.stringify(this.state));
+            if (typeof this.onChange === 'function') {
+              this.onChange(this.state);
+            }
+          } catch(e) {
+            console.error("[ReactiveStore] Notification Failed", e);
+          }
+        });
+      }
+
+      _makeReactive(obj) {
+        const self = this;
+        return new Proxy(obj, {
+          set(target, prop, value) {
+            if (target[prop] === value) return true;
+            target[prop] = value;
+            self.notify();
+            return true;
+          },
+          deleteProperty(target, prop) {
+            if (prop in target) {
+              delete target[prop];
+              self.notify();
+            }
+            return true;
+          }
+        });
+      }
     }
-
-    if (this.notifyPending) return;
-    this.notifyPending = true;
-
-    queueMicrotask(() => {
-      this.notifyPending = false;
-      try {
-        localStorage.setItem('quant_custom_mixes_v14_3', JSON.stringify(this.state));
-        if (typeof this.onChange === 'function') {
-          this.onChange(this.state);
-        }
-      } catch(e) {
-        console.error("[ReactiveStore] Notification Failed", e);
-      }
-    });
-  }
-
-  _makeReactive(obj) {
-    const self = this;
-    return new Proxy(obj, {
-      set(target, prop, value) {
-        if (target[prop] === value) return true; // 값 변동 없으면 무시
-        target[prop] = value;
-        self.notify();
-        return true;
-      },
-      deleteProperty(target, prop) {
-        if (prop in target) {
-          delete target[prop];
-          self.notify();
-        }
-        return true;
-      }
-    });
-  }
-}
 
     class UIController {
       static selectedTickers = ['QQQ', 'QLD'];
@@ -2125,7 +2150,7 @@ class ReactiveStore {
       static initReactiveMixes() {
         let initialMixes = [];
         try {
-          const stored = localStorage.getItem('quant_custom_mixes_v14_3');
+          const stored = localStorage.getItem('quant_custom_mixes_v15_0');
           if (stored) {
             initialMixes = JSON.parse(stored);
           } else {
@@ -2140,7 +2165,7 @@ class ReactiveStore {
 
         this.customMixesStore = new ReactiveStore(initialMixes, (updatedState) => {
           try {
-            localStorage.setItem('quant_custom_mixes_v14_3', JSON.stringify(updatedState));
+            localStorage.setItem('quant_custom_mixes_v15_0', JSON.stringify(updatedState));
           } catch(e) {
             console.warn("LocalStorage 쓰기 차단됨", e);
           }
@@ -2758,10 +2783,7 @@ class ReactiveStore {
           return;
         }
 
-        // --- 경고 메시지 검사: 실제 백필 한계를 넘어선 종목 검사 ---
         const warningList = [];
-
-        // 1. 개별 선택 자산 검사
         this.selectedTickers.forEach(ticker => {
           const config = TICKER_UNIVERSE[ticker];
           if (config && config.backfillMinDate && startMonth < config.backfillMinDate) {
@@ -2770,7 +2792,6 @@ class ReactiveStore {
           }
         });
 
-        // 2. 활성화된 믹스 전략 자산 검사
         activeMixes.forEach(mix => {
           if (mix.allocations) {
             Object.keys(mix.allocations).forEach(ticker => {
@@ -2789,7 +2810,6 @@ class ReactiveStore {
         let banner = document.getElementById('backfillWarningBanner');
         if (warningList.length > 0) {
           const msg = `⚠️ 선택한 시작 월(${startMonth}) 이전 데이터가 없는 종목이 포함되어 있어 <b>표기된 시점부터만 성과가 반영</b>됩니다:<br><span class="mt-1 block text-slate-300 leading-relaxed">${warningList.join(' · ')}</span>`;
-          
           ToastNotifier.show(`⚠️ 설정한 시작일(${startMonth}) 이전 데이터가 없는 종목이 포함되어 있습니다. 상세 목록은 화면 상단 경고창을 확인하세요.`, 'warning');
 
           if (!banner) {
@@ -3071,7 +3091,6 @@ class ReactiveStore {
         const summaryFragment = document.createDocumentFragment();
 
         const startMonth = document.getElementById('startMonth').value;
-
         const resArray = Object.values(results);
 
         resArray.sort((a, b) => {

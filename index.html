@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ETF 적립식 백테스트 계산기 v15.0 Pro</title>
+  <title>ETF 적립식 백테스트 계산기 v15.0 Pro Refactored</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -432,13 +432,10 @@
   <script>
     'use strict';
 
-    // Supabase 데이터베이스 연결 설정
     const SUPABASE_URL = "https://rqgbkqztalsgldhhqxhm.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable_z0y33AMk8uO_c75oTD-qMg_8kXsOhvk";
-
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // 글로벌 설정
     const GLOBAL_QUANT_CONFIG = {
       TAX_RATE: 0.22,
       TAX_ALLOWANCE_KRW: 2500000.0,
@@ -447,7 +444,6 @@
       CORS_WORKER_PROXY: "https://my-yahoo-proxy.rlfhdzk.workers.dev/?url="
     };
 
-    // S&P 500 Momentum TR Index 역사적 월별 초과 수익률 테이블 (1994-12 ~ 2017-10)
     const SPMO_OFFICIAL_MONTHLY_ALPHA = {
       '1995-01': 0.008, '1995-02': 0.005, '1995-03': 0.012, '1995-04': 0.003, '1995-05': 0.015, '1995-06': 0.002,
       '1995-07': 0.010, '1995-08': 0.004, '1995-09': 0.018, '1995-10': -0.005, '1995-11': 0.006, '1995-12': 0.011,
@@ -609,13 +605,20 @@
       'XBI':  { name: 'SPDR S&P Biotech ETF', base: '^SPSIBI', leverage: 1, fee: 0.0035, inceptYear: 2006, allowBackfill: true, backfillMinDate: '1990-01', proxyType: 'index_tracking' }
     };
 
+    /**
+     * IndexedDB 캐시 싱글톤 관리 클래스
+     * 기존 매 요청마다 DB 연결을 새로 열고 닫던 구조를 dbPromise 기반 단일 싱글톤 커스텀 프로미스로 개선
+     */
     class QuantDataCache {
       static dbName = "QuantBacktestCacheDB_v15_0";
       static storeName = "timeSeriesStore";
       static TTL_MS = 24 * 60 * 60 * 1000;
+      static dbPromise = null;
 
       static async openDB() {
-        return new Promise((resolve, reject) => {
+        if (this.dbPromise) return this.dbPromise;
+
+        this.dbPromise = new Promise((resolve, reject) => {
           const req = indexedDB.open(this.dbName, 1);
           req.onupgradeneeded = (e) => {
             const db = e.target.result;
@@ -624,8 +627,12 @@
             }
           };
           req.onsuccess = (e) => resolve(e.target.result);
-          req.onerror = (e) => reject(e.target.error);
+          req.onerror = (e) => {
+            this.dbPromise = null;
+            reject(e.target.error);
+          };
         });
+        return this.dbPromise;
       }
 
       static async get(key) {
@@ -723,6 +730,10 @@
       }
     }
 
+    /**
+     * SOFR (Secured Overnight Financing Rate) 및 과거 대체 OIS 금리 관리 클래스
+     * 주석 고지: SOFR 공식 발표(2018년) 이전 구간은 연방기금금리(Fed Funds Rate) 및 OIS 과거 추정치로 적용됨.
+     */
     class HistoricalInterestRates {
       static dynamicRates = new Map();
 
@@ -747,8 +758,8 @@
         if (year === 2023) return 0.050;
         if (year === 2022) return 0.017;
         if (year >= 2020 && year <= 2021) return 0.001;
-        if (year >= 2018 && year <= 2019) return 0.022;
-        if (year >= 2016 && year <= 2017) return 0.008;
+        if (year >= 2018 && year <= 2019) return 0.022; // SOFR 공식 도입 이후
+        if (year >= 2016 && year <= 2017) return 0.008; // 2017년 이전: Fed Funds Effective Rate / Historical OIS 추정치
         if (year >= 2008 && year <= 2015) return 0.002;
         if (year >= 2005 && year <= 2007) return 0.045;
         if (year >= 2001 && year <= 2004) return 0.022;
@@ -1067,7 +1078,6 @@
       static computeXIRR(cashFlows, finalVal, dates) {
         const m = cashFlows.length;
         
-        // dates 배열의 길이가 (cashFlows.length + 1) 인지 안전성 검증
         if (m === 0 || !dates || dates.length !== m + 1 || isNaN(finalVal) || finalVal <= GLOBAL_QUANT_CONFIG.EPSILON_PRECISION) {
           return -100.0;
         }
@@ -1208,11 +1218,16 @@
               if (baseCurr > 0 && basePrev > 0) {
                 let synthSimpleReturn = 0.0;
 
-                // ^TYX, ^TNX 등 국채 금리 지수를 베이스로 쓰는 ETF (TLT 등) 금리-가격 역관계 정밀 보정
+                /**
+                 * 국채 금리 지수(^TYX, ^TNX) 기반 TLT 가격 합성 알고리즘 개선
+                 * 수정 듀레이션(17.5년) 및 2차 테일러 볼록성(Convexity C ~ 350.0) 항을 추가 반영하여 오차 최소화
+                 */
                 if (config.base === '^TYX' || config.base === '^TNX' || config.base === '^TYX=F') {
                   const deltaYield = (baseCurr - basePrev) / 100.0; // 금리 변동폭
-                  const modDuration = 17.5; // TLT 20년+ 국채 평균 수정 듀레이션
-                  synthSimpleReturn = (-modDuration * deltaYield) - (config.fee / 252);
+                  const modDuration = 17.5; // TLT 수정 듀레이션
+                  const convexity = 350.0; // TLT 평균 볼록성 계수
+                  const yieldReturn = (-modDuration * deltaYield) + (0.5 * convexity * Math.pow(deltaYield, 2));
+                  synthSimpleReturn = yieldReturn - (config.fee / 252);
                 } 
                 else if (config.proxyType === 'official_embedded_index') {
                   const mStr = dateStr.substring(0, 7);
@@ -1444,9 +1459,6 @@
       }
     }
 
-    /**
-     * v15.0 Pro 차세대 4축 직교화 퀀트 스코어링 엔진
-     */
     class QuantScoreEngine {
       static calculatePeriodMonths(startMonth, endMonth) {
         const [sY, sM] = startMonth.split('-').map(Number);
@@ -1470,7 +1482,6 @@
         const cvar95 = Math.max(0, isNaN(res.cvar95) ? 0 : res.cvar95);
         const infoRatio = isNaN(res.informationRatio) ? 0 : res.informationRatio;
 
-        // 1. 수익성 점수 (S_ret: 최대 35점) - Rf 대비 초과수익률 기반 시그모이드
         const excessReturn = xirr - avgRfAnnPercent;
         let sReturn = 0;
         if (xirr <= 0) {
@@ -1480,18 +1491,15 @@
           sReturn = Math.max(0, Math.min(35.0, sReturn));
         }
 
-        // 2. 하방 효율성 점수 (S_down: 최대 25점) - Sortino + Bounded Calmar 직교 합성
         const boundedCalmar = (xirr > avgRfAnnPercent) ? (excessReturn / Math.max(1.0, mdd)) : 0;
         const downsideEfficiency = 0.6 * Math.min(5.0, sortino) + 0.4 * Math.min(5.0, boundedCalmar);
         const sDownside = 25.0 * (1.0 - Math.exp(-0.55 * downsideEfficiency));
 
-        // 3. 직교화 하락 스트레스 감점 (P_stress: 최대 20점 차감) - Ulcer & CVaR의 RMS 결합
         const normUlcer = ulcer / 12.0;
         const normCvar = cvar95 / 25.0;
         const rmsStress = Math.sqrt(0.5 * Math.pow(normUlcer, 2) + 0.5 * Math.pow(normCvar, 2));
         const pStress = 20.0 * (1.0 - Math.exp(-1.4 * rmsStress));
 
-        // 4. 몬테카를로 경로 생존점수 (S_mc: 최대 15점) - Sequence of Returns Risk 직접 결합
         let sMonteCarlo = 7.5;
         if (res.monteCarlo && res.monteCarlo.p50 > 0) {
           const p5 = res.monteCarlo.p5;
@@ -1500,10 +1508,8 @@
           sMonteCarlo = 15.0 * Math.min(1.0, Math.max(0, mcRatio / 0.60));
         }
 
-        // 5. 벤치마크 알파 / 정보비율 점수 (S_alpha: 최대 10점)
         const sAlpha = 10.0 / (1.0 + Math.exp(-0.7 * infoRatio));
 
-        // 6. 종합 점수 및 표본 신뢰도 보정 (F_time)
         const rawScore = Math.max(0, (sReturn + sDownside + sMonteCarlo + sAlpha) - pStress);
         const fTime = Math.min(1.0, Math.sqrt(Math.max(1, periodMonths) / 36.0));
 
@@ -2056,7 +2062,6 @@
 
         if (onProgress) onProgress(80);
         
-        // 몬테카를로 연산 결과를 종합 점수에 최종 재반영 (Sequence Risk 결합)
         const mcBatchResults = await WorkerManager.runMonteCarloBatchAsync(tasksForMonteCarlo, onProgress);
         Object.keys(mcBatchResults).forEach(key => {
           if (results[key]) {
@@ -2255,22 +2260,64 @@
         URL.revokeObjectURL(url);
       }
 
+      /**
+       * JSON 파싱 스키마 검증 및 보안(Prototype Pollution 방지 / 1MB 제한) 구현
+       */
       static importStrategies(event) {
-        const file = event.target.files[0];
+        const file = event.target.files?.[0];
         if (!file) return;
+
+        if (file.size > 1024 * 1024) {
+          ToastNotifier.show("파일 크기는 1MB 이하만 업로드 가능합니다.", "error");
+          event.target.value = '';
+          return;
+        }
 
         const reader = new FileReader();
         reader.onload = (e) => {
           try {
-            const importedMixes = JSON.parse(e.target.result);
-            if (Array.isArray(importedMixes)) {
-              this.customMixesStore.state.length = 0;
-              importedMixes.forEach(m => this.customMixesStore.state.push(m));
-              ToastNotifier.show("전략을 성공적으로 불러왔습니다!", "success");
-              this.runBacktest();
+            const rawData = JSON.parse(e.target.result);
+            if (!Array.isArray(rawData)) {
+              throw new Error("올바른 배열 구조가 아닙니다.");
             }
+
+            const validatedMixes = rawData
+              .filter(m => m && typeof m === 'object' && typeof m.name === 'string')
+              .map(m => {
+                const safeAllocations = {};
+                if (m.allocations && typeof m.allocations === 'object') {
+                  Object.keys(m.allocations).forEach(k => {
+                    if (Object.prototype.hasOwnProperty.call(m.allocations, k) && k !== '__proto__' && k !== 'constructor') {
+                      const weight = Number(m.allocations[k]);
+                      if (!isNaN(weight) && weight >= 0) {
+                        safeAllocations[k] = weight;
+                      }
+                    }
+                  });
+                }
+
+                return {
+                  id: 'mix_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+                  name: String(m.name).substring(0, 30),
+                  enabled: m.enabled !== false,
+                  rebalanceFreq: ['none', 'monthly', 'yearly'].includes(m.rebalanceFreq) ? m.rebalanceFreq : 'monthly',
+                  allocations: safeAllocations
+                };
+              });
+
+            if (validatedMixes.length === 0) {
+              ToastNotifier.show("유효한 전략 데이터가 없습니다.", "warning");
+              return;
+            }
+
+            this.customMixesStore.state.length = 0;
+            validatedMixes.forEach(m => this.customMixesStore.state.push(m));
+            ToastNotifier.show("전략을 성공적으로 불러왔습니다!", "success");
+            this.runBacktest();
           } catch (err) {
-            ToastNotifier.show("파일을 읽는 중 오류가 발생했습니다.", "error");
+            ToastNotifier.show("JSON 파싱 중 오류가 발생했습니다: " + err.message, "error");
+          } finally {
+            event.target.value = '';
           }
         };
         reader.readAsText(file);
@@ -2421,12 +2468,12 @@
               <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 pt-1">
                 ${tickers.map(t => `
                   <div class="bg-slate-900 p-1.5 rounded border border-slate-800 flex items-center justify-between gap-1">
-                    <span class="font-bold text-slate-200 text-xs whitespace-nowrap">${t}</span>
+                    <span class="font-bold text-slate-200 text-xs whitespace-nowrap">${QuantUtils.escapeHTML(t)}</span>
                     <div class="flex items-center gap-1 w-16">
-                      <input type="number" value="${mix.allocations[t]}" onchange="UIController.updateMixTickerWeight('${mix.id}', '${t}', this.value)" aria-label="${t} 비중" class="w-full bg-slate-950 border border-slate-700 rounded px-1 py-0.5 text-center text-xs text-amber-400 font-bold min-w-0">
+                      <input type="number" value="${mix.allocations[t]}" onchange="UIController.updateMixTickerWeight('${mix.id}', '${t}', this.value)" aria-label="${QuantUtils.escapeHTML(t)} 비중" class="w-full bg-slate-950 border border-slate-700 rounded px-1 py-0.5 text-center text-xs text-amber-400 font-bold min-w-0">
                       <span class="text-slate-500 text-[10px]">%</span>
                     </div>
-                    <button onclick="UIController.removeTickerFromMix('${mix.id}', '${t}')" aria-label="${t} 종목 제거" class="text-slate-500 hover:text-rose-400 text-xs font-bold">&times;</button>
+                    <button onclick="UIController.removeTickerFromMix('${mix.id}', '${t}')" aria-label="${QuantUtils.escapeHTML(t)} 종목 제거" class="text-slate-500 hover:text-rose-400 text-xs font-bold">&times;</button>
                   </div>
                 `).join('')}
               </div>
@@ -2435,7 +2482,7 @@
                 <div class="flex items-center gap-2">
                   <select onchange="if(this.value){ UIController.addTickerToMix('${mix.id}', this.value); this.value=''; }" aria-label="종목 추가" class="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-[11px] text-slate-300">
                     <option value="">+ 종목 추가...</option>
-                    ${unusedTickers.map(t => `<option value="${t}">${t} (${QuantUtils.escapeHTML(TICKER_UNIVERSE[t]?.name || t)})</option>`).join('')}
+                    ${unusedTickers.map(t => `<option value="${t}">${QuantUtils.escapeHTML(t)} (${QuantUtils.escapeHTML(TICKER_UNIVERSE[t]?.name || t)})</option>`).join('')}
                   </select>
                   <button onclick="UIController.equalizeMixWeights('${mix.id}')" aria-label="비중 균등 분배" class="text-[11px] bg-slate-900 hover:bg-slate-800 text-slate-300 px-2 py-1 rounded border border-slate-700 whitespace-nowrap">⚖️ 균등 분배 (1/N)</button>
                 </div>
@@ -2537,6 +2584,9 @@
         this.renderLeaderboard();
       }
 
+      /**
+       * 리더보드 렌더링 시 allocDesc 및 dynamic 문자열 XSS 방어 처리 강화
+       */
       static renderLeaderboard() {
         const tbody = document.getElementById('leaderboardTableBody');
         if (!tbody) return;
@@ -2568,7 +2618,9 @@
           tr.className = "hover:bg-slate-800/40 border-b border-slate-800/60";
 
           const rankBadge = idx === 0 ? '🥇 1위' : idx === 1 ? '🥈 2위' : idx === 2 ? '🥉 3위' : `${idx + 1}위`;
-          const allocDesc = Object.entries(item.allocations || {}).map(([t, w]) => `${QuantUtils.escapeHTML(t)}:${w}%`).join(' ');
+          const allocDesc = Object.entries(item.allocations || {})
+            .map(([t, w]) => `${QuantUtils.escapeHTML(t)}:${Number(w)}%`)
+            .join(' ');
           const rebBadge = rebBadgeMap[item.rebalanceFreq] || rebBadgeMap['monthly'];
 
           const safeName = QuantUtils.escapeHTML(item.name);
@@ -3163,6 +3215,10 @@
         tbody.appendChild(summaryFragment);
       }
 
+      /**
+       * Chart.js 업데이트 로직 개선
+       * 동일한 차트 타입일 경우 destroy 후 재생성하지 않고 update('none')을 사용하여 메모리 관리 및 부드러운 전환 구현
+       */
       static renderChart(results, sortedDates) {
         const ctx = document.getElementById('quantChart').getContext('2d');
         const palette = ['#34d399', '#60a5fa', '#f87171', '#c084fc', '#fb923c', '#38bdf8', '#a3e635', '#f472b6'];
@@ -3268,26 +3324,32 @@
           };
         }
 
-        if (this.chartInstance) {
-          this.chartInstance.destroy();
-          this.chartInstance = null;
-        }
-
-        this.chartInstance = new Chart(ctx, {
-          type: chartType,
-          data: { labels, datasets },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: false,
-            scales,
-            plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } } }
+        if (this.chartInstance && this.chartInstance.config.type === chartType) {
+          this.chartInstance.data.labels = labels;
+          this.chartInstance.data.datasets = datasets;
+          this.chartInstance.options.scales = scales;
+          this.chartInstance.update('none');
+        } else {
+          if (this.chartInstance) {
+            this.chartInstance.destroy();
+            this.chartInstance = null;
           }
-        });
+
+          this.chartInstance = new Chart(ctx, {
+            type: chartType,
+            data: { labels, datasets },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              animation: false,
+              scales,
+              plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } } }
+            }
+          });
+        }
       }
     }
 
-    // 메모리 누수 방지 이벤트 바인딩
     window.addEventListener('beforeunload', () => {
       WorkerManager.cleanup();
     });

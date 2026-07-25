@@ -529,7 +529,7 @@
         container.appendChild(toast);
         setTimeout(() => {
           if (toast.parentElement) toast.remove();
-        }, 5000);
+        }, 6000);
       }
     }
 
@@ -1118,7 +1118,7 @@
           processedDivs[symbol] = divMap;
         });
 
-        // 📌 [Fix] SPY 대체(Fallback) 로직 완전 제거 및 backfillMinDate 기반 백필 제한 적용
+        // 📌 SPY 대체(Fallback) 완전 제거 및 backfillMinDate 기반 백필 제한 적용
         Object.keys(TICKER_UNIVERSE).forEach(ticker => {
           const config = TICKER_UNIVERSE[ticker];
           if (!config.allowBackfill || !config.base) return;
@@ -2679,7 +2679,7 @@
           return;
         }
 
-        // 📌 [Fix] 백필 한계 검증 및 UI 경고 안내 팝업
+        // 📌 백필 한계 검증 및 단일 통합 경고 토스트 팝업 (중복/덮어쓰기 방지)
         const activeTickersSet = new Set(this.selectedTickers);
         activeMixes.forEach(mix => {
           if (mix.allocations) {
@@ -2687,15 +2687,23 @@
           }
         });
 
+        const warningList = [];
         activeTickersSet.forEach(ticker => {
           const config = TICKER_UNIVERSE[ticker];
           if (config && config.backfillMinDate) {
             if (startMonth < config.backfillMinDate) {
               const [minY, minM] = config.backfillMinDate.split('-');
-              ToastNotifier.show(`⚠️ ${ticker}은(는) ${minY}년 ${parseInt(minM, 10)}월 이전 데이터가 존재하지 않아 ${minY}년부터만 성과가 반영됩니다.`, 'warning');
+              warningList.push(`${ticker} (${minY}년 ${parseInt(minM, 10)}월~)`);
             }
           }
         });
+
+        if (warningList.length > 0) {
+          ToastNotifier.show(
+            `⚠️ 다음 종목은 ${startMonth} 이전 데이터가 존재하지 않아 표기된 시점부터만 성과가 반영됩니다: ${warningList.join(', ')}`,
+            'warning'
+          );
+        }
 
         const startYear = parseInt(startMonth.split('-')[0], 10);
         const endYear = parseInt(endMonth.split('-')[0], 10);

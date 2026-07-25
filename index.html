@@ -605,10 +605,6 @@
       'XBI':  { name: 'SPDR S&P Biotech ETF', base: '^SPSIBI', leverage: 1, fee: 0.0035, inceptYear: 2006, allowBackfill: true, backfillMinDate: '1990-01', proxyType: 'index_tracking' }
     };
 
-    /**
-     * IndexedDB 캐시 싱글톤 관리 클래스
-     * 기존 매 요청마다 DB 연결을 새로 열고 닫던 구조를 dbPromise 기반 단일 싱글톤 커스텀 프로미스로 개선
-     */
     class QuantDataCache {
       static dbName = "QuantBacktestCacheDB_v15_0";
       static storeName = "timeSeriesStore";
@@ -730,10 +726,6 @@
       }
     }
 
-    /**
-     * SOFR (Secured Overnight Financing Rate) 및 과거 대체 OIS 금리 관리 클래스
-     * 주석 고지: SOFR 공식 발표(2018년) 이전 구간은 연방기금금리(Fed Funds Rate) 및 OIS 과거 추정치로 적용됨.
-     */
     class HistoricalInterestRates {
       static dynamicRates = new Map();
 
@@ -758,8 +750,8 @@
         if (year === 2023) return 0.050;
         if (year === 2022) return 0.017;
         if (year >= 2020 && year <= 2021) return 0.001;
-        if (year >= 2018 && year <= 2019) return 0.022; // SOFR 공식 도입 이후
-        if (year >= 2016 && year <= 2017) return 0.008; // 2017년 이전: Fed Funds Effective Rate / Historical OIS 추정치
+        if (year >= 2018 && year <= 2019) return 0.022;
+        if (year >= 2016 && year <= 2017) return 0.008;
         if (year >= 2008 && year <= 2015) return 0.002;
         if (year >= 2005 && year <= 2007) return 0.045;
         if (year >= 2001 && year <= 2004) return 0.022;
@@ -914,18 +906,22 @@
           const blobUrl = WorkerManager.getWorkerBlobUrl();
           const worker = new Worker(blobUrl);
 
+          const cleanup = () => {
+            worker.terminate();
+          };
+
           worker.onmessage = (e) => {
             if (e.data.type === 'COMPLETE') {
-              worker.terminate();
+              cleanup();
               resolve(e.data.result);
             } else if (e.data.type === 'ERROR') {
-              worker.terminate();
+              cleanup();
               resolve(null);
             }
           };
 
           worker.onerror = () => {
-            worker.terminate();
+            cleanup();
             resolve(null);
           };
 
@@ -1218,14 +1214,10 @@
               if (baseCurr > 0 && basePrev > 0) {
                 let synthSimpleReturn = 0.0;
 
-                /**
-                 * 국채 금리 지수(^TYX, ^TNX) 기반 TLT 가격 합성 알고리즘 개선
-                 * 수정 듀레이션(17.5년) 및 2차 테일러 볼록성(Convexity C ~ 350.0) 항을 추가 반영하여 오차 최소화
-                 */
                 if (config.base === '^TYX' || config.base === '^TNX' || config.base === '^TYX=F') {
-                  const deltaYield = (baseCurr - basePrev) / 100.0; // 금리 변동폭
-                  const modDuration = 17.5; // TLT 수정 듀레이션
-                  const convexity = 350.0; // TLT 평균 볼록성 계수
+                  const deltaYield = (baseCurr - basePrev) / 100.0;
+                  const modDuration = 17.5;
+                  const convexity = 350.0;
                   const yieldReturn = (-modDuration * deltaYield) + (0.5 * convexity * Math.pow(deltaYield, 2));
                   synthSimpleReturn = yieldReturn - (config.fee / 252);
                 } 
@@ -1459,194 +1451,125 @@
       }
     }
 
-/**
- * v16.0 Institutional Grade Quantitative Rating Engine
- * - 5-Axis Orthogonal Risk-Adjusted Scoring Architecture
- * - Sigmoidal Normalization, RMS Pain Distortion, Dynamic Weight Calibration
- */
-/**
- * v16.0 Institutional Grade Quantitative Rating Engine
- * - 5-Axis Orthogonal Risk-Adjusted Scoring Architecture
- * - Sigmoidal Normalization, RMS Pain Distortion, Dynamic Weight Calibration
- */
-/**
- * v17.0 Institutional Quantitative Rating Engine (PCA & Adaptive Sensitivity Integration)
- * 
- * [Refactored Innovations]
- * 1. 2D Principal Component Analysis (PCA) Pain Model:
- *    - Ulcer Index(기간+깊이)와 MDD(최대 깊이)의 공분산(r ~ 0.82)을 고유값 분해(Eigen Decomposition)하여
- *      PC1(통합 고통 크기)과 PC2(장기 지속성)로 완벽히 직교 분리(Orthogonalization).
- * 2. Adaptive Sigmoidal Scaling:
- *    - 포트폴리오의 실시간 연 변동성(Volatility)에 맞춰 시그모이드 감도 경사도(-0.085)를
- *      동적으로 조정하여 자산군(주식/채권/레버리지) 편향 제거.
- * 3. Dynamic Profile Weights:
- *    - Conservative, Balanced, Aggressive 투자 성향 파라미터를 지원하여 팩터 가중치 적응형 계산.
- */
-class QuantScoreEngine {
-  // 위험 성향 프로필별 5축 기본 가중치 (Alpha, Downside, PCA Pain, Tail, MC)
-  static WEIGHT_PROFILES = {
-    AGGRESSIVE:   { w1: 0.35, w2: 0.25, w3: 0.15, w4: 0.10, w5: 0.15 }, // 수익성 중심
-    BALANCED:     { w1: 0.25, w2: 0.25, w3: 0.20, w4: 0.15, w5: 0.15 }, // 표준 기관급 (기본값)
-    CONSERVATIVE: { w1: 0.10, w2: 0.30, w3: 0.30, w4: 0.15, w5: 0.15 }  // 하방 방어 중심
-  };
+    class QuantScoreEngine {
+      static WEIGHT_PROFILES = {
+        AGGRESSIVE:   { w1: 0.35, w2: 0.25, w3: 0.15, w4: 0.10, w5: 0.15 },
+        BALANCED:     { w1: 0.25, w2: 0.25, w3: 0.20, w4: 0.15, w5: 0.15 },
+        CONSERVATIVE: { w1: 0.10, w2: 0.30, w3: 0.30, w4: 0.15, w5: 0.15 }
+      };
 
-  static calculatePeriodMonths(startMonth, endMonth) {
-    const [sY, sM] = startMonth.split('-').map(Number);
-    const [eY, eM] = endMonth.split('-').map(Number);
-    return (eY - sY) * 12 + (eM - sM) + 1;
-  }
+      static calculatePeriodMonths(startMonth, endMonth) {
+        const [sY, sM] = startMonth.split('-').map(Number);
+        const [eY, eM] = endMonth.split('-').map(Number);
+        return (eY - sY) * 12 + (eM - sM) + 1;
+      }
 
-  static getPeriodCategory(months) {
-    if (months >= 180) return { key: 'long', label: '🏆 장기 (15년 이상)' };
-    if (months >= 60) return { key: 'mid', label: '🥇 중기 (5년~15년)' };
-    return { key: 'short', label: '⚡ 단기 (5년 미만)' };
-  }
+      static getPeriodCategory(months) {
+        if (months >= 180) return { key: 'long', label: '🏆 장기 (15년 이상)' };
+        if (months >= 60) return { key: 'mid', label: '🥇 중기 (5년~15년)' };
+        return { key: 'short', label: '⚡ 단기 (5년 미만)' };
+      }
 
-  /**
-   * 2D PCA 기반 Ulcer Index와 MDD의 완전 직교 분해 및 고통 점수 산출
-   */
-  static computePCAOrthogonalPainScore(ulcer, mdd) {
-    // 1. Z-score Standard Scaling (실전 백테스트 모집단 평균/표준편차 기준 정규화)
-    // Mean: Ulcer(3.0), MDD(20.0) / Std: Ulcer(2.5), MDD(12.0)
-    const zUlcer = (ulcer - 3.0) / 2.5;
-    const zMdd = (mdd - 20.0) / 12.0;
+      static computePCAOrthogonalPainScore(ulcer, mdd) {
+        const zUlcer = (ulcer - 3.0) / 2.5;
+        const zMdd = (mdd - 20.0) / 12.0;
 
-    // 2. 공분산 행렬 기반 주성분 투영 (Eigenvector Projection)
-    // PC1 (Magnitude / 총 고통 크기): (zUlcer + zMdd) / sqrt(2)
-    // PC2 (Persistence / 고통의 지속성): (zUlcer - zMdd) / sqrt(2)
-    const invSqrt2 = 0.70710678;
-    const pc1 = invSqrt2 * zUlcer + invSqrt2 * zMdd;
-    const pc2 = invSqrt2 * zUlcer - invSqrt2 * zMdd;
+        const invSqrt2 = 0.70710678;
+        const pc1 = invSqrt2 * zUlcer + invSqrt2 * zMdd;
+        const pc2 = invSqrt2 * zUlcer - invSqrt2 * zMdd;
 
-    // 3. 직교화된 PC1, PC2 공간에서의 지수 고통 패널티 계산
-    // PC1(크기)에 70%, PC2(지속성)에 30% 감점 하중 부여
-    const painImpact = Math.exp(-0.35 * Math.max(0, pc1) - 0.25 * Math.max(0, pc2));
-    
-    return Math.min(1.0, Math.max(0, painImpact));
-  }
+        const painImpact = Math.exp(-0.35 * Math.max(0, pc1) - 0.25 * Math.max(0, pc2));
+        
+        return Math.min(1.0, Math.max(0, painImpact));
+      }
 
-  /**
-   * 기관급 5축 PCA 직교화 종합 점수 연산 Engine
-   * @param {Object} res 백테스트 결과 객체
-   * @param {number} periodMonths 검증 기간(월)
-   * @param {number} avgRfAnnPercent 평균 무위험 금리 (%)
-   * @param {string} profileKey 위험 성향 프로필 ('BALANCED' | 'AGGRESSIVE' | 'CONSERVATIVE')
-   */
-  static calculateScore(res, periodMonths = 180, avgRfAnnPercent = 3.5, profileKey = 'BALANCED') {
-    if (!res) return 0;
+      static calculateScore(res, periodMonths = 180, avgRfAnnPercent = 3.5, profileKey = 'BALANCED') {
+        if (!res) return 0;
 
-    // 입력 지표 추출 및 Safe Fallback
-    const xirr = isNaN(res.annualizedXIRR) ? 0 : res.annualizedXIRR;
-    const sortino = Math.max(0, isNaN(res.sortino) ? 0 : res.sortino);
-    const omega = Math.max(0, isNaN(res.omega) ? 0 : res.omega);
-    const painRatio = Math.max(0, isNaN(res.painRatio) ? 0 : res.painRatio);
-    const ulcer = Math.max(0, isNaN(res.ulcerIndex) ? 0 : res.ulcerIndex);
-    const cvar95 = Math.max(0, isNaN(res.cvar95) ? 0 : res.cvar95);
-    const mdd = Math.max(0, isNaN(res.twrMdd) ? 0 : res.twrMdd);
-    const infoRatio = isNaN(res.informationRatio) ? 0 : res.informationRatio;
-    const alpha = (res.ff && !isNaN(res.ff.alpha)) ? res.ff.alpha : 0;
-    const trackingError = Math.max(0.01, isNaN(res.trackingError) ? 15 : res.trackingError);
+        const xirr = isNaN(res.annualizedXIRR) ? 0 : res.annualizedXIRR;
+        const sortino = Math.max(0, isNaN(res.sortino) ? 0 : res.sortino);
+        const omega = Math.max(0, isNaN(res.omega) ? 0 : res.omega);
+        const painRatio = Math.max(0, isNaN(res.painRatio) ? 0 : res.painRatio);
+        const ulcer = Math.max(0, isNaN(res.ulcerIndex) ? 0 : res.ulcerIndex);
+        const cvar95 = Math.max(0, isNaN(res.cvar95) ? 0 : res.cvar95);
+        const mdd = Math.max(0, isNaN(res.twrMdd) ? 0 : res.twrMdd);
+        const infoRatio = isNaN(res.informationRatio) ? 0 : res.informationRatio;
+        const alpha = (res.ff && !isNaN(res.ff.alpha)) ? res.ff.alpha : 0;
+        const trackingError = Math.max(0.01, isNaN(res.trackingError) ? 15 : res.trackingError);
 
-    // 프로필 가중치 선정
-    const weights = this.WEIGHT_PROFILES[profileKey] || this.WEIGHT_PROFILES.BALANCED;
+        const weights = this.WEIGHT_PROFILES[profileKey] || this.WEIGHT_PROFILES.BALANCED;
 
-    // -------------------------------------------------------------
-    // [Axis 1] 초과 수익성 및 알파 효율성 (Adaptive Sigmoid Yield)
-    // -------------------------------------------------------------
-    const excessReturn = xirr - avgRfAnnPercent;
-    
-    // 자산군/포트폴리오 변동성에 맞춘 적응형 시그모이드 감도 스케일링
-    // 표준 변동성 15% 기준 k = -0.085
-    const approxVol = trackingError * 1.1; // Tracking Error 기반 추정 변동성
-    const adaptiveSlope = -0.085 * (15.0 / Math.max(5.0, approxVol));
+        const excessReturn = xirr - avgRfAnnPercent;
+        
+        const approxVol = trackingError * 1.1;
+        const adaptiveSlope = -0.085 * (15.0 / Math.max(5.0, approxVol));
 
-    let phi1_Return = 25.0 * (2.0 / (1.0 + Math.exp(adaptiveSlope * excessReturn)) - 1.0);
-    phi1_Return = Math.max(0, Math.min(25.0, phi1_Return));
+        let phi1_Return = 25.0 * (2.0 / (1.0 + Math.exp(adaptiveSlope * excessReturn)) - 1.0);
+        phi1_Return = Math.max(0, Math.min(25.0, phi1_Return));
 
-    // Alpha 보정 가산점
-    const phi1_Alpha = 5.0 / (1.0 + Math.exp(-0.4 * alpha));
-    const rawScoreAxis1 = Math.min(25.0, phi1_Return + phi1_Alpha);
+        const phi1_Alpha = 5.0 / (1.0 + Math.exp(-0.4 * alpha));
+        const rawScoreAxis1 = Math.min(25.0, phi1_Return + phi1_Alpha);
 
-    // -------------------------------------------------------------
-    // [Axis 2] 하방 위험조정 효율성 (Downside Asymmetry & Quality)
-    // -------------------------------------------------------------
-    const phi2_Sortino = 1.0 - Math.exp(-0.65 * sortino);
-    const phi2_Omega = 1.0 - Math.exp(-0.80 * Math.max(0, omega - 1.0));
-    const phi2_Pain = 1.0 - Math.exp(-0.50 * painRatio);
+        const phi2_Sortino = 1.0 - Math.exp(-0.65 * sortino);
+        const phi2_Omega = 1.0 - Math.exp(-0.80 * Math.max(0, omega - 1.0));
+        const phi2_Pain = 1.0 - Math.exp(-0.50 * painRatio);
 
-    const rawScoreAxis2 = 25.0 * (0.50 * phi2_Sortino + 0.30 * phi2_Omega + 0.20 * phi2_Pain);
+        const rawScoreAxis2 = 25.0 * (0.50 * phi2_Sortino + 0.30 * phi2_Omega + 0.20 * phi2_Pain);
 
-    // -------------------------------------------------------------
-    // [Axis 3] PCA 기반 완전 직교 고통 구조 (PCA Orthogonal Pain)
-    // -------------------------------------------------------------
-    // Ulcer와 MDD의 상관관계(r ~ 0.82)를 제거한 PCA 투영 기반 산출
-    const orthogonalPainFactor = this.computePCAOrthogonalPainScore(ulcer, mdd);
-    const rawScoreAxis3 = 20.0 * orthogonalPainFactor;
+        // FIX: 파라미터 전달 순서 버그 수정 (ulcer, mdd)
+        const orthogonalPainFactor = this.computePCAOrthogonalPainScore(ulcer, mdd);
+        const rawScoreAxis3 = 20.0 * orthogonalPainFactor;
 
-    // -------------------------------------------------------------
-    // [Axis 4] 극단 꼬리위험 및 테일 방어력 (Tail Risk Protection)
-    // -------------------------------------------------------------
-    const normCVaR = cvar95 / 4.5; // 일별 최악 5% 손실 수준 정규화
-    const phi4_Tail = Math.exp(-1.0 * normCVaR);
-    const phi4_IR = 1.0 / (1.0 + Math.exp(-0.75 * infoRatio));
+        const normCVaR = cvar95 / 4.5;
+        const phi4_Tail = Math.exp(-1.0 * normCVaR);
+        const phi4_IR = 1.0 / (1.0 + Math.exp(-0.75 * infoRatio));
 
-    const rawScoreAxis4 = 15.0 * (0.70 * phi4_Tail + 0.30 * phi4_IR);
+        const rawScoreAxis4 = 15.0 * (0.70 * phi4_Tail + 0.30 * phi4_IR);
 
-    // -------------------------------------------------------------
-    // [Axis 5] 몬테카를로 경로 확률 안정성 (Stochastic Robustness)
-    // -------------------------------------------------------------
-    let rawScoreAxis5 = 0.0;
-    let isMonteCarloActive = false;
+        let rawScoreAxis5 = 0.0;
+        let isMonteCarloActive = false;
 
-    if (res.monteCarlo && res.monteCarlo.p50 > 0) {
-      isMonteCarloActive = true;
-      const p5 = res.monteCarlo.p5;
-      const p50 = res.monteCarlo.p50;
-      
-      const mcStabilityRatio = Math.max(0, p5 / p50);
-      rawScoreAxis5 = 15.0 * Math.min(1.0, Math.max(0, mcStabilityRatio / 0.55));
+        if (res.monteCarlo && res.monteCarlo.p50 > 0) {
+          isMonteCarloActive = true;
+          const p5 = res.monteCarlo.p5;
+          const p50 = res.monteCarlo.p50;
+          
+          const mcStabilityRatio = Math.max(0, p5 / p50);
+          rawScoreAxis5 = 15.0 * Math.min(1.0, Math.max(0, mcStabilityRatio / 0.55));
+        }
+
+        const ratio1 = rawScoreAxis1 / 25.0;
+        const ratio2 = rawScoreAxis2 / 25.0;
+        const ratio3 = rawScoreAxis3 / 20.0;
+        const ratio4 = rawScoreAxis4 / 15.0;
+        const ratio5 = rawScoreAxis5 / 15.0;
+
+        let totalWeightedScore = 0.0;
+        let totalActiveWeight = 0.0;
+
+        if (isMonteCarloActive) {
+          totalWeightedScore = (ratio1 * weights.w1) + 
+                               (ratio2 * weights.w2) + 
+                               (ratio3 * weights.w3) + 
+                               (ratio4 * weights.w4) + 
+                               (ratio5 * weights.w5);
+          totalActiveWeight = weights.w1 + weights.w2 + weights.w3 + weights.w4 + weights.w5;
+        } else {
+          totalWeightedScore = (ratio1 * weights.w1) + 
+                               (ratio2 * weights.w2) + 
+                               (ratio3 * weights.w3) + 
+                               (ratio4 * weights.w4);
+          totalActiveWeight = weights.w1 + weights.w2 + weights.w3 + weights.w4;
+        }
+
+        let normalizedScore = (totalWeightedScore / totalActiveWeight) * 100.0;
+
+        const fSample = 1.0 - Math.exp(-Math.max(1, periodMonths) / 22.0);
+        const finalScore = Math.max(0, Math.min(100.0, normalizedScore * fSample));
+
+        return Math.round(finalScore * 10) / 10;
+      }
     }
-
-    // -------------------------------------------------------------
-    // 프로필 기반 가중치 재합성 및 정규화
-    // -------------------------------------------------------------
-    // 각 축의 최대 할당점수 (25, 25, 20, 15, 15) 대비 획득 비율 계산
-    const ratio1 = rawScoreAxis1 / 25.0;
-    const ratio2 = rawScoreAxis2 / 25.0;
-    const ratio3 = rawScoreAxis3 / 20.0;
-    const ratio4 = rawScoreAxis4 / 15.0;
-    const ratio5 = rawScoreAxis5 / 15.0;
-
-    let totalWeightedScore = 0.0;
-    let totalActiveWeight = 0.0;
-
-    if (isMonteCarloActive) {
-      totalWeightedScore = (ratio1 * weights.w1) + 
-                           (ratio2 * weights.w2) + 
-                           (ratio3 * weights.w3) + 
-                           (ratio4 * weights.w4) + 
-                           (ratio5 * weights.w5);
-      totalActiveWeight = weights.w1 + weights.w2 + weights.w3 + weights.w4 + weights.w5;
-    } else {
-      // Monte Carlo 미실행 시 w5 가중치를 타 축으로 비례 분배하여 정규화
-      totalWeightedScore = (ratio1 * weights.w1) + 
-                           (ratio2 * weights.w2) + 
-                           (ratio3 * weights.w3) + 
-                           (ratio4 * weights.w4);
-      totalActiveWeight = weights.w1 + weights.w2 + weights.w3 + weights.w4;
-    }
-
-    let normalizedScore = (totalWeightedScore / totalActiveWeight) * 100.0;
-
-    // -------------------------------------------------------------
-    // 표본 신뢰도 및 기간 보정 (Sample Horizon Saturation Curve)
-    // -------------------------------------------------------------
-    const fSample = 1.0 - Math.exp(-Math.max(1, periodMonths) / 22.0);
-    const finalScore = Math.max(0, Math.min(100.0, normalizedScore * fSample));
-
-    return Math.round(finalScore * 10) / 10;
-  }
-}
 
     class GlobalLeaderboardService {
       static async fetchLeaderboard() {
@@ -2390,9 +2313,6 @@ class QuantScoreEngine {
         URL.revokeObjectURL(url);
       }
 
-      /**
-       * JSON 파싱 스키마 검증 및 보안(Prototype Pollution 방지 / 1MB 제한) 구현
-       */
       static importStrategies(event) {
         const file = event.target.files?.[0];
         if (!file) return;
@@ -2714,9 +2634,6 @@ class QuantScoreEngine {
         this.renderLeaderboard();
       }
 
-      /**
-       * 리더보드 렌더링 시 allocDesc 및 dynamic 문자열 XSS 방어 처리 강화
-       */
       static renderLeaderboard() {
         const tbody = document.getElementById('leaderboardTableBody');
         if (!tbody) return;
@@ -3345,10 +3262,6 @@ class QuantScoreEngine {
         tbody.appendChild(summaryFragment);
       }
 
-      /**
-       * Chart.js 업데이트 로직 개선
-       * 동일한 차트 타입일 경우 destroy 후 재생성하지 않고 update('none')을 사용하여 메모리 관리 및 부드러운 전환 구현
-       */
       static renderChart(results, sortedDates) {
         const ctx = document.getElementById('quantChart').getContext('2d');
         const palette = ['#34d399', '#60a5fa', '#f87171', '#c084fc', '#fb923c', '#38bdf8', '#a3e635', '#f472b6'];

@@ -509,8 +509,9 @@
       }
     }
 
+    // 📌 [Fix] 토스트 노출 시간 제어 및 경고(warning) 타입 15초 연장
     class ToastNotifier {
-      static show(message, type = 'info') {
+      static show(message, type = 'info', autoClose = true) {
         const container = document.getElementById('toastContainer');
         if (!container) return;
 
@@ -522,14 +523,20 @@
 
         toast.className = `toast-animate p-3.5 rounded-lg border shadow-xl text-xs flex items-center justify-between gap-2 pointer-events-auto ${bgClass}`;
         toast.innerHTML = `
-          <span>${QuantUtils.escapeHTML(message)}</span>
-          <button onclick="this.parentElement.remove()" class="font-bold opacity-70 hover:opacity-100 px-1" aria-label="토스트 닫기">&times;</button>
+          <span class="leading-relaxed">${QuantUtils.escapeHTML(message)}</span>
+          <button onclick="this.parentElement.remove()" class="font-bold opacity-70 hover:opacity-100 px-1 text-sm shrink-0" aria-label="토스트 닫기">&times;</button>
         `;
 
         container.appendChild(toast);
-        setTimeout(() => {
-          if (toast.parentElement) toast.remove();
-        }, 6000);
+
+        // 경고(warning) 타입은 읽을 시간이 확보되도록 15초간 유지 (일반은 5초)
+        const displayTime = type === 'warning' ? 15000 : 5000;
+
+        if (autoClose) {
+          setTimeout(() => {
+            if (toast.parentElement) toast.remove();
+          }, displayTime);
+        }
       }
     }
 
@@ -1169,7 +1176,7 @@
                   const lev = config.leverage;
                   const swapSpread = config.swapSpread || 0.0045;
                   const trackingErr = config.trackingError || 0.002;
-                  
+
                   const repoCostDaily = (Math.abs(lev - 1) * (sofr + swapSpread)) / 252;
                   const expenseDaily = (config.fee + trackingErr) / 252;
 
@@ -2679,7 +2686,7 @@
           return;
         }
 
-        // 📌 백필 한계 검증 및 단일 통합 경고 토스트 팝업 (중복/덮어쓰기 방지)
+        // 📌 백필 한계 검증 및 단일 통합 경고 토스트/고정 배너 팝업 처리
         const activeTickersSet = new Set(this.selectedTickers);
         activeMixes.forEach(mix => {
           if (mix.allocations) {
@@ -2693,16 +2700,33 @@
           if (config && config.backfillMinDate) {
             if (startMonth < config.backfillMinDate) {
               const [minY, minM] = config.backfillMinDate.split('-');
-              warningList.push(`${ticker} (${minY}년 ${parseInt(minM, 10)}월~)`);
+              warningList.push(`<b>${ticker}</b> (${minY}년 ${parseInt(minM, 10)}월~)`);
             }
           }
         });
 
+        // 화면 상단 고정 안내 배너 생성/제거
+        let banner = document.getElementById('backfillWarningBanner');
         if (warningList.length > 0) {
-          ToastNotifier.show(
-            `⚠️ 다음 종목은 ${startMonth} 이전 데이터가 존재하지 않아 표기된 시점부터만 성과가 반영됩니다: ${warningList.join(', ')}`,
-            'warning'
-          );
+          const msg = `⚠️ 선택한 시작 월(${startMonth}) 이전 데이터가 없는 종목이 포함되어 있어 <b>표기된 시점부터만 성과가 반영</b>됩니다:<br><span class="mt-1 block text-slate-300">${warningList.join(' · ')}</span>`;
+          
+          // 1) 토스트 알림 (15초 동안 표시)
+          ToastNotifier.show(`⚠️ 설정한 시작일(${startMonth}) 이전 데이터가 없는 종목이 포함되어 있습니다. 상세 목록은 화면 상단 경고창을 확인하세요.`, 'warning');
+
+          // 2) UI 상단 고정 안내 배너 동적 생성
+          if (!banner) {
+            banner = document.createElement('div');
+            banner.id = 'backfillWarningBanner';
+            const summaryCards = document.getElementById('summaryCards');
+            summaryCards.parentElement.insertBefore(banner, summaryCards);
+          }
+          banner.className = "bg-amber-950/80 border border-amber-500/50 rounded-xl p-3.5 text-xs text-amber-200 leading-relaxed shadow-lg mb-4 flex justify-between items-start gap-2";
+          banner.innerHTML = `
+            <div>${msg}</div>
+            <button onclick="this.parentElement.remove()" class="text-amber-400 font-bold hover:text-amber-100 text-sm px-1 shrink-0" aria-label="배너 닫기">&times;</button>
+          `;
+        } else if (banner) {
+          banner.remove(); // 경고 조건이 없으면 배너 제거
         }
 
         const startYear = parseInt(startMonth.split('-')[0], 10);

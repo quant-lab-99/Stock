@@ -582,27 +582,28 @@
       }
     }
 
+    // 각 종목별 정확한 상장년월(inceptDate) 정밀 명시
     const TICKER_UNIVERSE = {
-      'QQQ':  { name: 'Invesco QQQ Trust', base: '^NDX', leverage: 1, fee: 0.0020, inceptYear: 1999, allowBackfill: true, backfillMinDate: '1985-10', proxyType: 'index_tracking' },
-      'QLD':  { name: 'ProShares Ultra QQQ (2x)', base: 'QQQ', leverage: 2, fee: 0.0095, inceptYear: 2006, allowBackfill: true, backfillMinDate: '1985-10', trackingError: 0.002, swapSpread: 0.0045, proxyType: 'leveraged' },
-      'TQQQ': { name: 'ProShares UltraPro QQQ (3x)', base: 'QQQ', leverage: 3, fee: 0.0098, inceptYear: 2010, allowBackfill: true, backfillMinDate: '1985-10', trackingError: 0.0035, swapSpread: 0.0055, proxyType: 'leveraged' },
-      'SQQQ': { name: 'ProShares Short QQQ (-3x)', base: 'QQQ', leverage: -3, fee: 0.0095, inceptYear: 2010, allowBackfill: true, backfillMinDate: '1985-10', trackingError: 0.004, swapSpread: 0.0060, proxyType: 'leveraged' },
-      'SPY':  { name: 'SPDR S&P 500 ETF Trust', base: '^GSPC', leverage: 1, fee: 0.0009, inceptYear: 1993, allowBackfill: true, backfillMinDate: '1985-01', proxyType: 'index_tracking' },
-      'SSO':  { name: 'ProShares Ultra S&P500 (2x)', base: 'SPY', leverage: 2, fee: 0.0091, inceptYear: 2006, allowBackfill: true, backfillMinDate: '1985-01', trackingError: 0.0015, swapSpread: 0.0040, proxyType: 'leveraged' },
-      'UPRO': { name: 'ProShares UltraPro S&P500 (3x)', base: 'SPY', leverage: 3, fee: 0.0091, inceptYear: 2009, allowBackfill: true, backfillMinDate: '1985-01', trackingError: 0.003, swapSpread: 0.0050, proxyType: 'leveraged' },
-      'SMH':  { name: 'VanEck Semiconductor ETF', base: '^SOX', leverage: 1, fee: 0.0035, inceptYear: 2011, allowBackfill: true, backfillMinDate: '1993-12', proxyType: 'index_tracking' },
-      'SOXL': { name: 'Direxion Semi Bull 3X', base: 'SMH', leverage: 3, fee: 0.0094, inceptYear: 2010, allowBackfill: true, backfillMinDate: '1993-12', trackingError: 0.004, swapSpread: 0.0060, proxyType: 'leveraged' },
-      'SCHD': { name: 'Schwab U.S. Dividend Equity', base: null, leverage: 1, fee: 0.0006, inceptYear: 2011, allowBackfill: false, backfillMinDate: '2011-10', warningReason: '2011년 이전 백필 불가', proxyType: 'unsupported' },
-      'SPMO': { name: 'Invesco S&P 500 Momentum', base: 'SPY', leverage: 1, fee: 0.0013, inceptYear: 2017, allowBackfill: true, backfillMinDate: '1994-12', proxyType: 'official_embedded_index' },
-      'JEPI': { name: 'JPMorgan Equity Premium', base: null, leverage: 1, fee: 0.0035, inceptYear: 2020, allowBackfill: false, backfillMinDate: '2020-05', warningReason: '2020년 이전 백필 불가', proxyType: 'unsupported' },
-      'TLT':  { name: 'iShares 20+ Year Treasury', base: '^TYX', leverage: 1, fee: 0.0015, inceptYear: 2002, allowBackfill: true, backfillMinDate: '1985-01', proxyType: 'index_tracking' },
-      'TMF':  { name: 'Direxion 20+ Yr Bull 3x', base: 'TLT', leverage: 3, fee: 0.0101, inceptYear: 2009, allowBackfill: true, backfillMinDate: '1985-01', trackingError: 0.003, swapSpread: 0.0050, proxyType: 'leveraged' },
-      'GLD':  { name: 'SPDR Gold Shares', base: 'GC=F', leverage: 1, fee: 0.0040, inceptYear: 2004, allowBackfill: true, backfillMinDate: '1985-01', proxyType: 'index_tracking' },
-      'ARKK': { name: 'ARK Innovation ETF', base: null, leverage: 1, fee: 0.0075, inceptYear: 2014, allowBackfill: false, backfillMinDate: '2014-10', warningReason: '2014년 이전 백필 불가', proxyType: 'unsupported' },
-      'IWM':  { name: 'iShares Russell 2000 ETF', base: '^RUT', leverage: 1, fee: 0.0019, inceptYear: 2000, allowBackfill: true, backfillMinDate: '1987-01', proxyType: 'index_tracking' },
-      'XLK':  { name: 'Technology Select SPDR', base: null, leverage: 1, fee: 0.0010, inceptYear: 1998, allowBackfill: false, backfillMinDate: '1998-12', warningReason: '1998년 이전 백필 불가', proxyType: 'direct' },
-      'XLE':  { name: 'Energy Select SPDR', base: null, leverage: 1, fee: 0.0010, inceptYear: 1998, allowBackfill: false, backfillMinDate: '1998-12', warningReason: '1998년 이전 백필 불가', proxyType: 'direct' },
-      'XBI':  { name: 'SPDR S&P Biotech ETF', base: '^SPSIBI', leverage: 1, fee: 0.0035, inceptYear: 2006, allowBackfill: true, backfillMinDate: '1990-01', proxyType: 'index_tracking' }
+      'QQQ':  { name: 'Invesco QQQ Trust', base: '^NDX', leverage: 1, fee: 0.0020, inceptDate: '1999-03', allowBackfill: true, backfillMinDate: '1985-10', proxyType: 'index_tracking' },
+      'QLD':  { name: 'ProShares Ultra QQQ (2x)', base: 'QQQ', leverage: 2, fee: 0.0095, inceptDate: '2006-06', allowBackfill: true, backfillMinDate: '1985-10', trackingError: 0.002, swapSpread: 0.0045, proxyType: 'leveraged' },
+      'TQQQ': { name: 'ProShares UltraPro QQQ (3x)', base: 'QQQ', leverage: 3, fee: 0.0098, inceptDate: '2010-02', allowBackfill: true, backfillMinDate: '1985-10', trackingError: 0.0035, swapSpread: 0.0055, proxyType: 'leveraged' },
+      'SQQQ': { name: 'ProShares Short QQQ (-3x)', base: 'QQQ', leverage: -3, fee: 0.0095, inceptDate: '2010-02', allowBackfill: true, backfillMinDate: '1985-10', trackingError: 0.004, swapSpread: 0.0060, proxyType: 'leveraged' },
+      'SPY':  { name: 'SPDR S&P 500 ETF Trust', base: '^GSPC', leverage: 1, fee: 0.0009, inceptDate: '1993-01', allowBackfill: true, backfillMinDate: '1985-01', proxyType: 'index_tracking' },
+      'SSO':  { name: 'ProShares Ultra S&P500 (2x)', base: 'SPY', leverage: 2, fee: 0.0091, inceptDate: '2006-06', allowBackfill: true, backfillMinDate: '1985-01', trackingError: 0.0015, swapSpread: 0.0040, proxyType: 'leveraged' },
+      'UPRO': { name: 'ProShares UltraPro S&P500 (3x)', base: 'SPY', leverage: 3, fee: 0.0091, inceptDate: '2009-06', allowBackfill: true, backfillMinDate: '1985-01', trackingError: 0.003, swapSpread: 0.0050, proxyType: 'leveraged' },
+      'SMH':  { name: 'VanEck Semiconductor ETF', base: '^SOX', leverage: 1, fee: 0.0035, inceptDate: '2011-12', allowBackfill: true, backfillMinDate: '1993-12', proxyType: 'index_tracking' },
+      'SOXL': { name: 'Direxion Semi Bull 3X', base: 'SMH', leverage: 3, fee: 0.0094, inceptDate: '2010-03', allowBackfill: true, backfillMinDate: '1993-12', trackingError: 0.004, swapSpread: 0.0060, proxyType: 'leveraged' },
+      'SCHD': { name: 'Schwab U.S. Dividend Equity', base: null, leverage: 1, fee: 0.0006, inceptDate: '2011-10', allowBackfill: false, backfillMinDate: '2011-10', warningReason: '2011년 이전 백필 불가', proxyType: 'unsupported' },
+      'SPMO': { name: 'Invesco S&P 500 Momentum', base: 'SPY', leverage: 1, fee: 0.0013, inceptDate: '2017-10', allowBackfill: true, backfillMinDate: '1994-12', proxyType: 'official_embedded_index' },
+      'JEPI': { name: 'JPMorgan Equity Premium', base: null, leverage: 1, fee: 0.0035, inceptDate: '2020-05', allowBackfill: false, backfillMinDate: '2020-05', warningReason: '2020년 이전 백필 불가', proxyType: 'unsupported' },
+      'TLT':  { name: 'iShares 20+ Year Treasury', base: '^TYX', leverage: 1, fee: 0.0015, inceptDate: '2002-07', allowBackfill: true, backfillMinDate: '1985-01', proxyType: 'index_tracking' },
+      'TMF':  { name: 'Direxion 20+ Yr Bull 3x', base: 'TLT', leverage: 3, fee: 0.0101, inceptDate: '2009-04', allowBackfill: true, backfillMinDate: '1985-01', trackingError: 0.003, swapSpread: 0.0050, proxyType: 'leveraged' },
+      'GLD':  { name: 'SPDR Gold Shares', base: 'GC=F', leverage: 1, fee: 0.0040, inceptDate: '2004-11', allowBackfill: true, backfillMinDate: '1985-01', proxyType: 'index_tracking' },
+      'ARKK': { name: 'ARK Innovation ETF', base: null, leverage: 1, fee: 0.0075, inceptDate: '2014-10', allowBackfill: false, backfillMinDate: '2014-10', warningReason: '2014년 이전 백필 불가', proxyType: 'unsupported' },
+      'IWM':  { name: 'iShares Russell 2000 ETF', base: '^RUT', leverage: 1, fee: 0.0019, inceptDate: '2000-05', allowBackfill: true, backfillMinDate: '1987-01', proxyType: 'index_tracking' },
+      'XLK':  { name: 'Technology Select SPDR', base: null, leverage: 1, fee: 0.0010, inceptDate: '1998-12', allowBackfill: false, backfillMinDate: '1998-12', warningReason: '1998년 이전 백필 불가', proxyType: 'direct' },
+      'XLE':  { name: 'Energy Select SPDR', base: null, leverage: 1, fee: 0.0010, inceptDate: '1998-12', allowBackfill: false, backfillMinDate: '1998-12', warningReason: '1998년 이전 백필 불가', proxyType: 'direct' },
+      'XBI':  { name: 'SPDR S&P Biotech ETF', base: '^SPSIBI', leverage: 1, fee: 0.0035, inceptDate: '2006-01', allowBackfill: true, backfillMinDate: '1990-01', proxyType: 'index_tracking' }
     };
 
     class QuantDataCache {
@@ -1516,7 +1517,6 @@
 
         const rawScoreAxis2 = 25.0 * (0.50 * phi2_Sortino + 0.30 * phi2_Omega + 0.20 * phi2_Pain);
 
-        // FIX: 파라미터 전달 순서 버그 수정 (ulcer, mdd)
         const orthogonalPainFactor = this.computePCAOrthogonalPainScore(ulcer, mdd);
         const rawScoreAxis3 = 20.0 * orthogonalPainFactor;
 
@@ -2761,9 +2761,10 @@
             isChecked ? 'bg-emerald-950/60 border-emerald-500/80 text-emerald-300' : 'bg-slate-950 border-slate-800 text-slate-500 hover:border-slate-700'
           }`;
           
+          const inceptDate = item.inceptDate || `${item.inceptYear}-01`;
           const backfillTag = item.allowBackfill 
-            ? `<span class="text-[9px] bg-cyan-950 text-cyan-400 px-1 rounded font-semibold whitespace-nowrap">${item.backfillMinDate} 지수추종 백필</span>`
-            : `<span class="text-[9px] bg-rose-950 text-rose-400 px-1 rounded font-semibold whitespace-nowrap">${item.backfillMinDate} 백필불가</span>`;
+            ? `<span class="text-[9px] bg-cyan-950 text-cyan-400 px-1 rounded font-semibold whitespace-nowrap">상장:${inceptDate} (백필:${item.backfillMinDate}~)</span>`
+            : `<span class="text-[9px] bg-rose-950 text-rose-400 px-1 rounded font-semibold whitespace-nowrap">상장:${inceptDate} (백필불가)</span>`;
 
           label.innerHTML = `
             <input type="checkbox" id="chk-${ticker}" value="${ticker}" ${isChecked ? 'checked' : ''} onchange="UIController.toggleTicker('${ticker}')" aria-label="${ticker} 선택" class="accent-emerald-500">
@@ -2885,9 +2886,10 @@
         const warningList = [];
         this.selectedTickers.forEach(ticker => {
           const config = TICKER_UNIVERSE[ticker];
-          if (config && config.backfillMinDate && startMonth < config.backfillMinDate) {
-            const [minY, minM] = config.backfillMinDate.split('-');
-            warningList.push(`<span class="text-emerald-400 font-bold">[개별]</span> <b>${ticker}</b> (${minY}년 ${parseInt(minM, 10)}월~)`);
+          const inceptDate = config?.inceptDate || `${config?.inceptYear || 2000}-01`;
+          if (config && startMonth < inceptDate) {
+            const [inceptY, inceptM] = inceptDate.split('-');
+            warningList.push(`<span class="text-emerald-400 font-bold">[개별]</span> <b>${ticker}</b> (상장: ${inceptY}년 ${parseInt(inceptM, 10)}월~)`);
           }
         });
 
@@ -2895,9 +2897,10 @@
           if (mix.allocations) {
             Object.keys(mix.allocations).forEach(ticker => {
               const config = TICKER_UNIVERSE[ticker];
-              if (config && config.backfillMinDate && startMonth < config.backfillMinDate) {
-                const [minY, minM] = config.backfillMinDate.split('-');
-                const itemText = `<span class="text-amber-400 font-bold">[믹스: ${QuantUtils.escapeHTML(mix.name)}]</span> <b>${ticker}</b> (${minY}년 ${parseInt(minM, 10)}월~)`;
+              const inceptDate = config?.inceptDate || `${config?.inceptYear || 2000}-01`;
+              if (config && startMonth < inceptDate) {
+                const [inceptY, inceptM] = inceptDate.split('-');
+                const itemText = `<span class="text-amber-400 font-bold">[믹스: ${QuantUtils.escapeHTML(mix.name)}]</span> <b>${ticker}</b> (상장: ${inceptY}년 ${parseInt(inceptM, 10)}월~)`;
                 if (!warningList.includes(itemText)) {
                   warningList.push(itemText);
                 }
@@ -2908,8 +2911,8 @@
 
         let banner = document.getElementById('backfillWarningBanner');
         if (warningList.length > 0) {
-          const msg = `⚠️ 선택한 시작 월(${startMonth}) 이전 데이터가 없는 종목이 포함되어 있어 <b>표기된 시점부터만 성과가 반영</b>됩니다:<br><span class="mt-1 block text-slate-300 leading-relaxed">${warningList.join(' · ')}</span>`;
-          ToastNotifier.show(`⚠️ 설정한 시작일(${startMonth}) 이전 데이터가 없는 종목이 포함되어 있습니다. 상세 목록은 화면 상단 경고창을 확인하세요.`, 'warning');
+          const msg = `⚠️ 선택한 시작 월(${startMonth})이 ETF 상장일보다 이전이어서 <b>상장 이전 시점은 지수 백필 추정치가 반영</b>됩니다:<br><span class="mt-1 block text-slate-300 leading-relaxed">${warningList.join(' · ')}</span>`;
+          ToastNotifier.show(`⚠️ 설정한 시작일(${startMonth}) 이전 상장된 종목이 포함되어 백필 추정치가 반영됩니다.`, 'warning');
 
           if (!banner) {
             banner = document.createElement('div');
@@ -3209,18 +3212,20 @@
           const ticker = res.ticker;
           const isMix = ticker.startsWith('[MIX]');
           const config = TICKER_UNIVERSE[ticker];
-          const minDate = config?.backfillMinDate || '1985-01';
-          const isBackfilled = startMonth < minDate;
+          
+          // ETF 상장일 및 백필 판단 로직 정밀화
+          const inceptDate = config?.inceptDate || `${config?.inceptYear || 2000}-01`;
+          const usesBackfill = startMonth < inceptDate;
 
           let backfillBadge = '';
           if (isMix) {
             backfillBadge = `<span class="text-[9px] bg-amber-950 text-amber-300 px-1 py-0.5 rounded border border-amber-700 inline-block truncate max-w-full">커스텀 믹스</span>`;
-          } else if (!isBackfilled) {
+          } else if (!usesBackfill) {
             backfillBadge = `<span class="text-[9px] bg-emerald-950/80 text-emerald-400 px-1 py-0.5 rounded border border-emerald-800/50 inline-block truncate max-w-full">실제 데이터 100%</span>`;
           } else if (config?.allowBackfill) {
-            backfillBadge = `<span class="text-[9px] bg-cyan-950/80 text-cyan-300 px-1 py-0.5 rounded border border-cyan-800/50 inline-block truncate max-w-full">지수추종 백필 (${minDate}~)</span>`;
+            backfillBadge = `<span class="text-[9px] bg-cyan-950/80 text-cyan-300 px-1 py-0.5 rounded border border-cyan-800/50 inline-block truncate max-w-full">지수 백필 적용 (상장: ${inceptDate})</span>`;
           } else {
-            backfillBadge = `<span class="text-[9px] bg-rose-950/80 text-rose-300 px-1 py-0.5 rounded border border-rose-800/50 inline-block truncate max-w-full">⚠️ 백필 제한 (${minDate}~)</span>`;
+            backfillBadge = `<span class="text-[9px] bg-rose-950/80 text-rose-300 px-1 py-0.5 rounded border border-rose-800/50 inline-block truncate max-w-full">⚠️ 백필 제한 (${inceptDate}~)</span>`;
           }
 
           const score = res.score;

@@ -537,7 +537,7 @@
       'QLD':  { name: 'ProShares Ultra QQQ (2x)', base: 'QQQ', leverage: 2, fee: 0.0095, inceptYear: 2006, allowBackfill: true, trackingError: 0.002, swapSpread: 0.0045, proxyType: 'leveraged' },
       'TQQQ': { name: 'ProShares UltraPro QQQ (3x)', base: 'QQQ', leverage: 3, fee: 0.0098, inceptYear: 2010, allowBackfill: true, trackingError: 0.0035, swapSpread: 0.0055, proxyType: 'leveraged' },
       'SQQQ': { name: 'ProShares Short QQQ (-3x)', base: 'QQQ', leverage: -3, fee: 0.0095, inceptYear: 2010, allowBackfill: true, trackingError: 0.004, swapSpread: 0.0060, proxyType: 'leveraged' },
-      'SPY':  { name: 'SPDR S&P 500 ETF Trust', base: null, leverage: 1, fee: 0.0009, inceptYear: 1993, allowBackfill: true, proxyType: 'direct' },
+      'SPY': { name: 'SPDR S&P 500 ETF Trust', base: '^GSPC', leverage: 1, fee: 0.0009, inceptYear: 1993, allowBackfill: true, proxyType: 'index_tracking' },
       'SSO':  { name: 'ProShares Ultra S&P500 (2x)', base: 'SPY', leverage: 2, fee: 0.0091, inceptYear: 2006, allowBackfill: true, trackingError: 0.0015, swapSpread: 0.0040, proxyType: 'leveraged' },
       'UPRO': { name: 'ProShares UltraPro S&P500 (3x)', base: 'SPY', leverage: 3, fee: 0.0091, inceptYear: 2009, allowBackfill: true, trackingError: 0.003, swapSpread: 0.0050, proxyType: 'leveraged' },
       'SMH':  { name: 'VanEck Semiconductor ETF', base: '^SOX', leverage: 1, fee: 0.0035, inceptYear: 2011, allowBackfill: true, proxyType: 'index_tracking' },

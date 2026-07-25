@@ -34,7 +34,7 @@
           📈 ETF 적립식 백테스트 계산기 <span class="text-xs font-normal text-emerald-300 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800">v14.3 Pro</span>
         </h1>
         <p class="text-slate-400 text-xs mt-1">
-          미국 주요 ETF 적립식·거치식 성과 분석 및 기관급 퀀트 포트폴리오 시뮬레이터
+          미국 주요 ETF 적립식·거치식 성과 분석 및 퀀트 포트폴리오 시뮬레이터
         </p>
       </div>
       <div id="engineStatus" class="text-xs px-2.5 py-1 rounded bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-2 whitespace-nowrap">
@@ -47,7 +47,7 @@
     <div class="bg-slate-900/90 border border-emerald-500/30 rounded-xl p-3 sm:p-4 space-y-2 text-xs">
       <div class="flex justify-between items-center cursor-pointer" onclick="UIController.toggleBeginnerGuide()" role="button" aria-label="핵심 가성비 가이드 토글">
         <span class="font-bold text-emerald-400 flex items-center gap-1.5 whitespace-nowrap">
-          💡 한눈에 보는 기관급 퀀트 종합점수 및 핵심 지표 가이드
+          💡 한눈에 보는 퀀트 종합점수 및 핵심 지표 가이드
         </span>
         <span id="guideToggleIcon" class="text-slate-400 font-bold whitespace-nowrap">▲ 접기</span>
       </div>
@@ -348,7 +348,7 @@
             </th>
             <th onclick="UIController.handleSort('score')" class="px-3 py-3 text-amber-400 sortable-th whitespace-nowrap">
               종합 점수 🏆
-              <button onclick="event.stopPropagation(); UIController.showMetricInfo('종합 점수 🏆', '기관급 시그모이드 다모형 알고리즘을 사용하여 수익성(XIRR), 순수하락 효율(소티노), 회복력(칼마), 마음고통(Ulcer), 최악손실(CVaR), 검증 기간 신뢰도를 종합 산출한 100점 만점 성과 점수입니다.')" class="text-amber-500/80 hover:text-amber-300 text-[11px] ml-0.5" title="도움말">ℹ️</button>
+              <button onclick="event.stopPropagation(); UIController.showMetricInfo('종합 점수 🏆', '시그모이드 다모형 알고리즘을 사용하여 수익성(XIRR), 순수하락 효율(소티노), 회복력(칼마), 마음고통(Ulcer), 최악손실(CVaR), 검증 기간 신뢰도를 종합 산출한 100점 만점 성과 점수입니다.')" class="text-amber-500/80 hover:text-amber-300 text-[11px] ml-0.5" title="도움말">ℹ️</button>
               <span id="sort-score">▼</span>
             </th>
             <th onclick="UIController.handleSort('investedKrw')" class="px-3 py-3 sortable-th whitespace-nowrap">

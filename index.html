@@ -1459,64 +1459,82 @@
       }
     }
 
-    class QuantScoreEngine {
-      static calculatePeriodMonths(startMonth, endMonth) {
-        const [sY, sM] = startMonth.split('-').map(Number);
-        const [eY, eM] = endMonth.split('-').map(Number);
-        return (eY - sY) * 12 + (eM - sM) + 1;
-      }
+class QuantScoreEngine {
+  static calculatePeriodMonths(startMonth, endMonth) {
+    const [sY, sM] = startMonth.split('-').map(Number);
+    const [eY, eM] = endMonth.split('-').map(Number);
+    return (eY - sY) * 12 + (eM - sM) + 1;
+  }
 
-      static getPeriodCategory(months) {
-        if (months >= 180) return { key: 'long', label: '🏆 장기 (15년 이상)' };
-        if (months >= 60) return { key: 'mid', label: '🥇 중기 (5년~15년)' };
-        return { key: 'short', label: '⚡ 단기 (5년 미만)' };
-      }
+  static getPeriodCategory(months) {
+    if (months >= 180) return { key: 'long', label: '🏆 장기 (15년 이상)' };
+    if (months >= 60) return { key: 'mid', label: '🥇 중기 (5년~15년)' };
+    return { key: 'short', label: '⚡ 단기 (5년 미만)' };
+  }
 
-      static calculateScore(res, periodMonths = 180, avgRfAnnPercent = 3.5) {
-        if (!res) return 0;
+  /**
+   * v15.1 Refactored Orthogonal Score Engine
+   * - 하방 효율성(Sortino) 단일 축 정제 (Calmar 중복 제거)
+   * - 몬테카를로 미실행 시 동적 가중치 정규화(Dynamic Weight Normalization) 적용
+   * - 실전 시장 분포 기준 Ulcer(6.0) 및 CVaR 95%(5.0) 분모 스케일 캘리브레이션
+   * - 포화형 스무딩 기간 가중치 곡선 적용
+   */
+  static calculateScore(res, periodMonths = 180, avgRfAnnPercent = 3.5) {
+    if (!res) return 0;
 
-        const xirr = res.annualizedXIRR || 0;
-        const sortino = Math.max(0, isNaN(res.sortino) ? 0 : res.sortino);
-        const mdd = Math.abs(res.twrMdd || 0);
-        const ulcer = Math.max(0, isNaN(res.ulcerIndex) ? 0 : res.ulcerIndex);
-        const cvar95 = Math.max(0, isNaN(res.cvar95) ? 0 : res.cvar95);
-        const infoRatio = isNaN(res.informationRatio) ? 0 : res.informationRatio;
+    const xirr = res.annualizedXIRR || 0;
+    const sortino = Math.max(0, isNaN(res.sortino) ? 0 : res.sortino);
+    const ulcer = Math.max(0, isNaN(res.ulcerIndex) ? 0 : res.ulcerIndex);
+    const cvar95 = Math.max(0, isNaN(res.cvar95) ? 0 : res.cvar95);
+    const infoRatio = isNaN(res.informationRatio) ? 0 : res.informationRatio;
 
-        const excessReturn = xirr - avgRfAnnPercent;
-        let sReturn = 0;
-        if (xirr <= 0) {
-          sReturn = Math.max(0, 10 * (1 + xirr / 100));
-        } else {
-          sReturn = 35.0 * (2.0 / (1.0 + Math.exp(-0.08 * excessReturn)) - 1.0);
-          sReturn = Math.max(0, Math.min(35.0, sReturn));
-        }
-
-        const boundedCalmar = (xirr > avgRfAnnPercent) ? (excessReturn / Math.max(1.0, mdd)) : 0;
-        const downsideEfficiency = 0.6 * Math.min(5.0, sortino) + 0.4 * Math.min(5.0, boundedCalmar);
-        const sDownside = 25.0 * (1.0 - Math.exp(-0.55 * downsideEfficiency));
-
-        const normUlcer = ulcer / 12.0;
-        const normCvar = cvar95 / 25.0;
-        const rmsStress = Math.sqrt(0.5 * Math.pow(normUlcer, 2) + 0.5 * Math.pow(normCvar, 2));
-        const pStress = 20.0 * (1.0 - Math.exp(-1.4 * rmsStress));
-
-        let sMonteCarlo = 7.5;
-        if (res.monteCarlo && res.monteCarlo.p50 > 0) {
-          const p5 = res.monteCarlo.p5;
-          const p50 = res.monteCarlo.p50;
-          const mcRatio = Math.max(0, p5 / p50);
-          sMonteCarlo = 15.0 * Math.min(1.0, Math.max(0, mcRatio / 0.60));
-        }
-
-        const sAlpha = 10.0 / (1.0 + Math.exp(-0.7 * infoRatio));
-
-        const rawScore = Math.max(0, (sReturn + sDownside + sMonteCarlo + sAlpha) - pStress);
-        const fTime = Math.min(1.0, Math.sqrt(Math.max(1, periodMonths) / 36.0));
-
-        const finalScore = Math.max(0, Math.min(100, rawScore * fTime));
-        return Math.round(finalScore * 10) / 10;
-      }
+    // 1. 수익성 축 (sReturn: 최대 35점)
+    const excessReturn = xirr - avgRfAnnPercent;
+    let sReturn = 0;
+    if (xirr <= 0) {
+      sReturn = Math.max(0, 5 * (1 + xirr / 100));
+    } else {
+      sReturn = 35.0 * (2.0 / (1.0 + Math.exp(-0.09 * excessReturn)) - 1.0);
+      sReturn = Math.max(0, Math.min(35.0, sReturn));
     }
+
+    // 2. 하방 효율성 축 (sDownside: 최대 25점) - Calmar 중복 제거 후 Sortino 단일 축 정제
+    const sDownside = 25.0 * (1.0 - Math.exp(-0.85 * sortino));
+
+    // 3. 고통 및 극단 위험 감점 축 (pStress: 최대 20점) - 스케일 캘리브레이션 적용
+    const normUlcer = ulcer / 6.0;   // Ulcer Index 일반적 상한선 6.0 반영
+    const normCvar = cvar95 / 5.0;     // 일별/월별 CVaR 95% 위험 기준선 5.0% 반영
+    const rmsStress = Math.sqrt(0.5 * Math.pow(normUlcer, 2) + 0.5 * Math.pow(normCvar, 2));
+    const pStress = 20.0 * (1.0 - Math.exp(-1.2 * rmsStress));
+
+    // 4. 알파 및 추종 효율 보조 축 (sAlpha: 최대 10점)
+    const sAlpha = 10.0 / (1.0 + Math.exp(-0.8 * infoRatio));
+
+    // 5. 몬테카를로 경로 안정성 축 (sMonteCarlo: 최대 15점) 및 동적 정규화
+    let sMonteCarlo = 0;
+    let maxAvailableScore = 70.0; // 기본 3개 축 만점 합계 (35 + 25 + 10)
+
+    if (res.monteCarlo && res.monteCarlo.p50 > 0) {
+      const p5 = res.monteCarlo.p5;
+      const p50 = res.monteCarlo.p50;
+      const mcRatio = Math.max(0, p5 / p50);
+      sMonteCarlo = 15.0 * Math.min(1.0, Math.max(0, mcRatio / 0.60));
+      maxAvailableScore += 15.0; // 몬테카를로 포함 시 85.0으로 확장
+    }
+
+    // 순수 획득 점수
+    const rawEarned = Math.max(0, (sReturn + sDownside + sAlpha + sMonteCarlo) - pStress);
+
+    // Dynamic Weight Normalization (100점 만점 환산)
+    const normalizedScore = (rawEarned / maxAvailableScore) * 100.0;
+
+    // 6. 기간 안정성 가중치 (fTime) - 완만한 포화형 스무딩 곡선
+    const fTime = 0.55 + 0.45 * (1.0 - Math.exp(-Math.max(1, periodMonths) / 20.0));
+
+    const finalScore = Math.max(0, Math.min(100, normalizedScore * fTime));
+    return Math.round(finalScore * 10) / 10;
+  }
+}
 
     class GlobalLeaderboardService {
       static async fetchLeaderboard() {

@@ -1987,45 +1987,60 @@
       }
     }
 
-    class ReactiveStore {
-      constructor(initialData, onChange) {
-        this.onChange = onChange;
-        this.silentSync = false;
-        this.state = this._makeReactive(initialData);
-      }
+class ReactiveStore {
+  constructor(initialData, onChange) {
+    this.onChange = onChange;
+    this.silentSync = false;
+    this.notifyPending = false; // 중복 호출 방지 플래그
+    this.state = this._makeReactive(initialData);
+  }
 
-      _makeReactive(obj) {
-        const self = this;
-        return new Proxy(obj, {
-          set(target, prop, value) {
-            target[prop] = value;
-            try {
-              if (!self.silentSync) {
-                self.onChange(self.state);
-              } else {
-                localStorage.setItem('quant_custom_mixes_v14_3', JSON.stringify(self.state));
-              }
-            } catch(e) {
-              console.error("[ReactiveStore] Storage Write Failed", e);
-            }
-            return true;
-          },
-          deleteProperty(target, prop) {
-            delete target[prop];
-            try {
-              if (!self.silentSync) {
-                self.onChange(self.state);
-              } else {
-                localStorage.setItem('quant_custom_mixes_v14_3', JSON.stringify(self.state));
-              }
-            } catch(e) {
-              console.error("[ReactiveStore] Storage Delete Failed", e);
-            }
-            return true;
-          }
-        });
+  // 상태 변경 이벤트를 마이크로태스크 큐로 병합 처리
+  notify() {
+    if (this.silentSync) {
+      try {
+        localStorage.setItem('quant_custom_mixes_v14_3', JSON.stringify(this.state));
+      } catch(e) {
+        console.error("[ReactiveStore] Storage Write Failed", e);
       }
+      return;
     }
+
+    if (this.notifyPending) return;
+    this.notifyPending = true;
+
+    queueMicrotask(() => {
+      this.notifyPending = false;
+      try {
+        localStorage.setItem('quant_custom_mixes_v14_3', JSON.stringify(this.state));
+        if (typeof this.onChange === 'function') {
+          this.onChange(this.state);
+        }
+      } catch(e) {
+        console.error("[ReactiveStore] Notification Failed", e);
+      }
+    });
+  }
+
+  _makeReactive(obj) {
+    const self = this;
+    return new Proxy(obj, {
+      set(target, prop, value) {
+        if (target[prop] === value) return true; // 값 변동 없으면 무시
+        target[prop] = value;
+        self.notify();
+        return true;
+      },
+      deleteProperty(target, prop) {
+        if (prop in target) {
+          delete target[prop];
+          self.notify();
+        }
+        return true;
+      }
+    });
+  }
+}
 
     class UIController {
       static selectedTickers = ['QQQ', 'QLD'];

@@ -1987,60 +1987,60 @@
       }
     }
 
-class ReactiveStore {
-  constructor(initialData, onChange) {
-    this.onChange = onChange;
-    this.silentSync = false;
-    this.notifyPending = false; // 중복 호출 방지 플래그
-    this.state = this._makeReactive(initialData);
-  }
-
-  // 상태 변경 이벤트를 마이크로태스크 큐로 병합 처리
-  notify() {
-    if (this.silentSync) {
-      try {
-        localStorage.setItem('quant_custom_mixes_v14_3', JSON.stringify(this.state));
-      } catch(e) {
-        console.error("[ReactiveStore] Storage Write Failed", e);
+    // 📌 [수정 완료] queueMicrotask 기반 마이크로태스크 병합 ReactiveStore
+    class ReactiveStore {
+      constructor(initialData, onChange) {
+        this.onChange = onChange;
+        this.silentSync = false;
+        this.notifyPending = false;
+        this.state = this._makeReactive(initialData);
       }
-      return;
+
+      notify() {
+        if (this.silentSync) {
+          try {
+            localStorage.setItem('quant_custom_mixes_v14_3', JSON.stringify(this.state));
+          } catch(e) {
+            console.error("[ReactiveStore] Storage Write Failed", e);
+          }
+          return;
+        }
+
+        if (this.notifyPending) return;
+        this.notifyPending = true;
+
+        queueMicrotask(() => {
+          this.notifyPending = false;
+          try {
+            localStorage.setItem('quant_custom_mixes_v14_3', JSON.stringify(this.state));
+            if (typeof this.onChange === 'function') {
+              this.onChange(this.state);
+            }
+          } catch(e) {
+            console.error("[ReactiveStore] Notification Failed", e);
+          }
+        });
+      }
+
+      _makeReactive(obj) {
+        const self = this;
+        return new Proxy(obj, {
+          set(target, prop, value) {
+            if (target[prop] === value) return true;
+            target[prop] = value;
+            self.notify();
+            return true;
+          },
+          deleteProperty(target, prop) {
+            if (prop in target) {
+              delete target[prop];
+              self.notify();
+            }
+            return true;
+          }
+        });
+      }
     }
-
-    if (this.notifyPending) return;
-    this.notifyPending = true;
-
-    queueMicrotask(() => {
-      this.notifyPending = false;
-      try {
-        localStorage.setItem('quant_custom_mixes_v14_3', JSON.stringify(this.state));
-        if (typeof this.onChange === 'function') {
-          this.onChange(this.state);
-        }
-      } catch(e) {
-        console.error("[ReactiveStore] Notification Failed", e);
-      }
-    });
-  }
-
-  _makeReactive(obj) {
-    const self = this;
-    return new Proxy(obj, {
-      set(target, prop, value) {
-        if (target[prop] === value) return true; // 값 변동 없으면 무시
-        target[prop] = value;
-        self.notify();
-        return true;
-      },
-      deleteProperty(target, prop) {
-        if (prop in target) {
-          delete target[prop];
-          self.notify();
-        }
-        return true;
-      }
-    });
-  }
-}
 
     class UIController {
       static selectedTickers = ['QQQ', 'QLD'];
@@ -2082,11 +2082,6 @@ class ReactiveStore {
         }
 
         this.customMixesStore = new ReactiveStore(initialMixes, (updatedState) => {
-          try {
-            localStorage.setItem('quant_custom_mixes_v14_3', JSON.stringify(updatedState));
-          } catch(e) {
-            console.warn("LocalStorage 쓰기 차단됨", e);
-          }
           this.renderMixStrategiesUI();
         });
 
@@ -2408,9 +2403,9 @@ class ReactiveStore {
         const months = QuantScoreEngine.calculatePeriodMonths(startMonth, endMonth);
         const periodCat = QuantScoreEngine.getPeriodCategory(months);
 
-        // 📌 닉네임 유효성 검사 강화 (공백 제거 및 1~12자 글자 수 제한)
+        // 📌 닉네임 유효성 검사 강화
         let rawAuthor = prompt("리더보드에 보여줄 닉네임을 입력하세요 (1~12자):", "익명");
-        if (rawAuthor === null) return; // 취소 버튼 누른 경우
+        if (rawAuthor === null) return;
         
         rawAuthor = rawAuthor.trim();
         if (rawAuthor.length > 12) rawAuthor = rawAuthor.substring(0, 12);

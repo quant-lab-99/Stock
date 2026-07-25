@@ -71,11 +71,11 @@
       <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <div>
           <label for="startMonth" class="block text-xs font-semibold text-slate-400 mb-1 whitespace-nowrap">시작 월 (YYYY-MM)</label>
-          <input type="month" id="startMonth" value="2000-01" min="1985-01" max="2026-12" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs focus:border-emerald-500 text-slate-100">
+          <input type="month" id="startMonth" value="2000-01" min="1985-01" max="2026-12" onchange="UIController.onDateChange()" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs focus:border-emerald-500 text-slate-100">
         </div>
         <div>
           <label for="endMonth" class="block text-xs font-semibold text-slate-400 mb-1 whitespace-nowrap">종료 월 (YYYY-MM)</label>
-          <input type="month" id="endMonth" value="2026-07" min="1985-01" max="2026-12" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs focus:border-emerald-500 text-slate-100">
+          <input type="month" id="endMonth" value="2026-07" min="1985-01" max="2026-12" onchange="UIController.onDateChange()" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs focus:border-emerald-500 text-slate-100">
         </div>
         <div>
           <label for="investMode" class="block text-xs font-semibold text-amber-400 mb-1 whitespace-nowrap">투자 전략 방식</label>
@@ -2243,6 +2243,26 @@
         this.runBacktest();
       }
 
+      static onDateChange() {
+        this.renderModalCheckboxes();
+        this.renderMixStrategiesUI();
+        
+        const startMonth = document.getElementById('startMonth').value;
+        const unavailableSelected = [];
+
+        this.selectedTickers.forEach(ticker => {
+          const cfg = TICKER_UNIVERSE[ticker];
+          const minDate = cfg?.backfillMinDate || cfg?.inceptDate;
+          if (cfg && !cfg.allowBackfill && startMonth < minDate) {
+            unavailableSelected.push(ticker);
+          }
+        });
+
+        if (unavailableSelected.length > 0) {
+          ToastNotifier.show(`⚠️ 현재 시작 월(${startMonth}) 기준 백필 불가 종목 포함됨: ${unavailableSelected.join(', ')}`, 'warning');
+        }
+      }
+
       static initReactiveMixes() {
         let initialMixes = [];
         try {
@@ -2368,6 +2388,7 @@
         document.getElementById('startMonth').value = newMinDate;
         document.getElementById('backfillErrorModal').classList.add('hidden');
         ToastNotifier.show(`시작 월이 ${newMinDate}로 자동 조정되었습니다. 시뮬레이션을 다시 시작합니다.`, "success");
+        this.onDateChange();
         this.runBacktest();
       }
 
@@ -2577,6 +2598,7 @@
         }
 
         const fragment = document.createDocumentFragment();
+        const currentStartMonth = document.getElementById('startMonth')?.value || '2000-01';
 
         this.customMixes.forEach(mix => {
           const card = document.createElement('div');
@@ -2612,16 +2634,24 @@
               </div>
 
               <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 pt-1">
-                ${tickers.map(t => `
-                  <div class="bg-slate-900 p-1.5 rounded border border-slate-800 flex items-center justify-between gap-1">
-                    <span class="font-bold text-slate-200 text-xs whitespace-nowrap">${QuantUtils.escapeHTML(t)}</span>
-                    <div class="flex items-center gap-1 w-16">
-                      <input type="number" value="${mix.allocations[t]}" onchange="UIController.updateMixTickerWeight('${mix.id}', '${t}', this.value)" aria-label="${QuantUtils.escapeHTML(t)} 비중" class="w-full bg-slate-950 border border-slate-700 rounded px-1 py-0.5 text-center text-xs text-amber-400 font-bold min-w-0">
-                      <span class="text-slate-500 text-[10px]">%</span>
+                ${tickers.map(t => {
+                  const cfg = TICKER_UNIVERSE[t];
+                  const minDate = cfg?.backfillMinDate || cfg?.inceptDate;
+                  const isUnavail = cfg && !cfg.allowBackfill && currentStartMonth < minDate;
+                  return `
+                    <div class="bg-slate-900 p-1.5 rounded border ${isUnavail ? 'border-rose-600/80 bg-rose-950/20' : 'border-slate-800'} flex items-center justify-between gap-1">
+                      <div class="flex flex-col truncate min-w-0">
+                        <span class="font-bold ${isUnavail ? 'text-rose-400 line-through' : 'text-slate-200'} text-xs whitespace-nowrap">${QuantUtils.escapeHTML(t)}</span>
+                        ${isUnavail ? `<span class="text-[9px] text-rose-400 font-semibold truncate">🚫 ${minDate}~</span>` : ''}
+                      </div>
+                      <div class="flex items-center gap-1 w-16 shrink-0">
+                        <input type="number" value="${mix.allocations[t]}" onchange="UIController.updateMixTickerWeight('${mix.id}', '${t}', this.value)" aria-label="${QuantUtils.escapeHTML(t)} 비중" class="w-full bg-slate-950 border border-slate-700 rounded px-1 py-0.5 text-center text-xs text-amber-400 font-bold min-w-0">
+                        <span class="text-slate-500 text-[10px]">%</span>
+                      </div>
+                      <button onclick="UIController.removeTickerFromMix('${mix.id}', '${t}')" aria-label="${QuantUtils.escapeHTML(t)} 종목 제거" class="text-slate-500 hover:text-rose-400 text-xs font-bold shrink-0">&times;</button>
                     </div>
-                    <button onclick="UIController.removeTickerFromMix('${mix.id}', '${t}')" aria-label="${QuantUtils.escapeHTML(t)} 종목 제거" class="text-slate-500 hover:text-rose-400 text-xs font-bold">&times;</button>
-                  </div>
-                `).join('')}
+                  `;
+                }).join('')}
               </div>
 
               <div class="flex items-center justify-between pt-1 text-xs border-t border-slate-800/80 flex-wrap gap-2">
@@ -2847,33 +2877,41 @@
 
       static renderModalCheckboxes() {
         const grid = document.getElementById('modalCheckboxGrid');
+        if (!grid) return;
         const fragment = document.createDocumentFragment();
 
-        const currentStartMonth = document.getElementById('startMonth').value;
+        const currentStartMonth = document.getElementById('startMonth')?.value || '2000-01';
 
         for (const [ticker, item] of Object.entries(TICKER_UNIVERSE)) {
           const isChecked = this.selectedTickers.includes(ticker);
-          const label = document.createElement('label');
-          label.id = `label-chk-${ticker}`;
-          label.className = `flex items-center gap-2 p-2 rounded border cursor-pointer transition ${
-            isChecked ? 'bg-emerald-950/60 border-emerald-500/80 text-emerald-300' : 'bg-slate-950 border-slate-800 text-slate-500 hover:border-slate-700'
-          }`;
-          
           const inceptDate = item.inceptDate || `${item.inceptYear || 2000}-01`;
           const minDate = item.backfillMinDate || inceptDate;
           const isUnavailable = !item.allowBackfill && currentStartMonth < minDate;
 
-          const backfillTag = item.allowBackfill 
-            ? `<span class="text-[9px] bg-cyan-950 text-cyan-400 px-1 rounded font-semibold whitespace-nowrap">상장:${inceptDate}</span>`
-            : isUnavailable
-              ? `<span class="text-[9px] bg-rose-950 text-rose-300 border border-rose-800 px-1 rounded font-bold whitespace-nowrap">🚫 선택불가 (${minDate}~)</span>`
-              : `<span class="text-[9px] bg-slate-800 text-slate-300 px-1 rounded font-semibold whitespace-nowrap">상장:${inceptDate}</span>`;
+          const label = document.createElement('label');
+          label.id = `label-chk-${ticker}`;
+          label.className = `flex items-center gap-2 p-2 rounded border transition ${
+            isUnavailable 
+              ? 'bg-slate-950/50 border-rose-950/60 text-slate-600 opacity-60 cursor-not-allowed'
+              : isChecked 
+                ? 'bg-emerald-950/60 border-emerald-500/80 text-emerald-300 cursor-pointer' 
+                : 'bg-slate-950 border-slate-800 text-slate-500 hover:border-slate-700 cursor-pointer'
+          }`;
+
+          let backfillTag = '';
+          if (isUnavailable) {
+            backfillTag = `<span class="text-[9px] bg-rose-950 text-rose-300 border border-rose-800 px-1 rounded font-bold whitespace-nowrap">🚫 선택불가 (${minDate}~)</span>`;
+          } else if (item.allowBackfill && currentStartMonth < inceptDate) {
+            backfillTag = `<span class="text-[9px] bg-cyan-950 text-cyan-300 border border-cyan-800 px-1 rounded font-semibold whitespace-nowrap">지수백필 (상장:${inceptDate})</span>`;
+          } else {
+            backfillTag = `<span class="text-[9px] bg-emerald-950 text-emerald-300 border border-emerald-800 px-1 rounded font-semibold whitespace-nowrap">실제데이터 (상장:${inceptDate})</span>`;
+          }
 
           label.innerHTML = `
-            <input type="checkbox" id="chk-${ticker}" value="${ticker}" ${isChecked ? 'checked' : ''} onchange="UIController.toggleTicker('${ticker}')" aria-label="${ticker} 선택" class="accent-emerald-500">
-            <div class="truncate w-full">
+            <input type="checkbox" id="chk-${ticker}" value="${ticker}" ${isChecked ? 'checked' : ''} ${isUnavailable ? 'disabled' : ''} onchange="UIController.toggleTicker('${ticker}')" aria-label="${ticker} 선택" class="accent-emerald-500 disabled:opacity-30">
+            <div class="truncate w-full" onclick="${isUnavailable ? `ToastNotifier.show('🚫 ${ticker}는 ${minDate} 이후 데이터만 존재하여 현재 설정(${currentStartMonth})에서는 선택할 수 없습니다.', 'warning')` : ''}">
               <div class="flex items-center justify-between gap-1">
-                <span class="font-bold text-slate-200 whitespace-nowrap">${ticker}</span>
+                <span class="font-bold ${isUnavailable ? 'text-slate-500 line-through' : 'text-slate-200'} whitespace-nowrap">${ticker}</span>
                 ${backfillTag}
               </div>
               <span class="text-[10px] text-slate-500 truncate block">${QuantUtils.escapeHTML(item.name)}</span>
@@ -2887,6 +2925,16 @@
       }
 
       static toggleTicker(ticker) {
+        const currentStartMonth = document.getElementById('startMonth')?.value || '2000-01';
+        const config = TICKER_UNIVERSE[ticker];
+        const minDate = config?.backfillMinDate || config?.inceptDate;
+
+        if (config && !config.allowBackfill && currentStartMonth < minDate && !this.selectedTickers.includes(ticker)) {
+          ToastNotifier.show(`🚫 ${ticker}는 ${minDate} 이후 데이터만 존재하여 현재 설정(${currentStartMonth})에서는 선택할 수 없습니다.`, 'error');
+          this.renderModalCheckboxes();
+          return;
+        }
+
         const idx = this.selectedTickers.indexOf(ticker);
         if (idx > -1) {
           this.selectedTickers.splice(idx, 1);
@@ -2898,7 +2946,16 @@
       }
 
       static selectAll(status) {
-        this.selectedTickers = status ? Object.keys(TICKER_UNIVERSE) : [];
+        const currentStartMonth = document.getElementById('startMonth')?.value || '2000-01';
+        if (status) {
+          this.selectedTickers = Object.keys(TICKER_UNIVERSE).filter(ticker => {
+            const cfg = TICKER_UNIVERSE[ticker];
+            const minDate = cfg?.backfillMinDate || cfg?.inceptDate;
+            return cfg?.allowBackfill || currentStartMonth >= minDate;
+          });
+        } else {
+          this.selectedTickers = [];
+        }
         this.updateActiveChips();
         this.renderModalCheckboxes();
       }

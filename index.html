@@ -516,6 +516,7 @@
 
         const toast = document.createElement('div');
         const bgClass = type === 'error' ? 'bg-rose-900 border-rose-700 text-rose-100' : 
+                        type === 'warning' ? 'bg-amber-900 border-amber-700 text-amber-100' :
                         type === 'success' ? 'bg-emerald-900 border-emerald-700 text-emerald-100' : 
                         'bg-slate-900 border-slate-700 text-slate-100';
 
@@ -528,31 +529,32 @@
         container.appendChild(toast);
         setTimeout(() => {
           if (toast.parentElement) toast.remove();
-        }, 4000);
+        }, 5000);
       }
     }
 
+    // 📌 종목 유니버스 및 백필 한계일(backfillMinDate) 명시
     const TICKER_UNIVERSE = {
-      'QQQ':  { name: 'Invesco QQQ Trust', base: '^NDX', leverage: 1, fee: 0.0020, inceptYear: 1999, allowBackfill: true, proxyType: 'index_tracking' },
-      'QLD':  { name: 'ProShares Ultra QQQ (2x)', base: 'QQQ', leverage: 2, fee: 0.0095, inceptYear: 2006, allowBackfill: true, trackingError: 0.002, swapSpread: 0.0045, proxyType: 'leveraged' },
-      'TQQQ': { name: 'ProShares UltraPro QQQ (3x)', base: 'QQQ', leverage: 3, fee: 0.0098, inceptYear: 2010, allowBackfill: true, trackingError: 0.0035, swapSpread: 0.0055, proxyType: 'leveraged' },
-      'SQQQ': { name: 'ProShares Short QQQ (-3x)', base: 'QQQ', leverage: -3, fee: 0.0095, inceptYear: 2010, allowBackfill: true, trackingError: 0.004, swapSpread: 0.0060, proxyType: 'leveraged' },
-      'SPY': { name: 'SPDR S&P 500 ETF Trust', base: '^GSPC', leverage: 1, fee: 0.0009, inceptYear: 1993, allowBackfill: true, proxyType: 'index_tracking' },
-      'SSO':  { name: 'ProShares Ultra S&P500 (2x)', base: 'SPY', leverage: 2, fee: 0.0091, inceptYear: 2006, allowBackfill: true, trackingError: 0.0015, swapSpread: 0.0040, proxyType: 'leveraged' },
-      'UPRO': { name: 'ProShares UltraPro S&P500 (3x)', base: 'SPY', leverage: 3, fee: 0.0091, inceptYear: 2009, allowBackfill: true, trackingError: 0.003, swapSpread: 0.0050, proxyType: 'leveraged' },
-      'SMH':  { name: 'VanEck Semiconductor ETF', base: '^SOX', leverage: 1, fee: 0.0035, inceptYear: 2011, allowBackfill: true, proxyType: 'index_tracking' },
-      'SOXL': { name: 'Direxion Semi Bull 3X', base: 'SMH', leverage: 3, fee: 0.0094, inceptYear: 2010, allowBackfill: true, trackingError: 0.004, swapSpread: 0.0060, proxyType: 'leveraged' },
-      'SCHD': { name: 'Schwab U.S. Dividend Equity', base: null, leverage: 1, fee: 0.0006, inceptYear: 2011, allowBackfill: false, warningReason: '2011년 이전 백필 불가', proxyType: 'unsupported' },
-      'SPMO': { name: 'Invesco S&P 500 Momentum', base: '^SP500MUP', leverage: 1, fee: 0.0013, inceptYear: 2017, allowBackfill: true, proxyType: 'index_tracking' },
-      'JEPI': { name: 'JPMorgan Equity Premium', base: null, leverage: 1, fee: 0.0035, inceptYear: 2020, allowBackfill: false, warningReason: '2020년 이전 백필 불가', proxyType: 'unsupported' },
-      'TLT':  { name: 'iShares 20+ Year Treasury', base: '^TYX', leverage: 1, fee: 0.0015, inceptYear: 2002, allowBackfill: true, proxyType: 'index_tracking' },
-      'TMF':  { name: 'Direxion 20+ Yr Bull 3x', base: 'TLT', leverage: 3, fee: 0.0101, inceptYear: 2009, allowBackfill: true, trackingError: 0.003, swapSpread: 0.0050, proxyType: 'leveraged' },
-      'GLD':  { name: 'SPDR Gold Shares', base: 'GC=F', leverage: 1, fee: 0.0040, inceptYear: 2004, allowBackfill: true, proxyType: 'index_tracking' },
-      'ARKK': { name: 'ARK Innovation ETF', base: null, leverage: 1, fee: 0.0075, inceptYear: 2014, allowBackfill: false, warningReason: '2014년 이전 백필 불가', proxyType: 'unsupported' },
-      'IWM':  { name: 'iShares Russell 2000 ETF', base: '^RUT', leverage: 1, fee: 0.0019, inceptYear: 2000, allowBackfill: true, proxyType: 'index_tracking' },
-      'XLK':  { name: 'Technology Select SPDR', base: null, leverage: 1, fee: 0.0010, inceptYear: 1998, allowBackfill: true, proxyType: 'direct' },
-      'XLE':  { name: 'Energy Select SPDR', base: null, leverage: 1, fee: 0.0010, inceptYear: 1998, allowBackfill: true, proxyType: 'direct' },
-      'XBI':  { name: 'SPDR S&P Biotech ETF', base: '^SPSIBI', leverage: 1, fee: 0.0035, inceptYear: 2006, allowBackfill: true, proxyType: 'index_tracking' }
+      'QQQ':  { name: 'Invesco QQQ Trust', base: '^NDX', leverage: 1, fee: 0.0020, inceptYear: 1999, allowBackfill: true, backfillMinDate: '1985-10', proxyType: 'index_tracking' },
+      'QLD':  { name: 'ProShares Ultra QQQ (2x)', base: 'QQQ', leverage: 2, fee: 0.0095, inceptYear: 2006, allowBackfill: true, backfillMinDate: '1985-10', trackingError: 0.002, swapSpread: 0.0045, proxyType: 'leveraged' },
+      'TQQQ': { name: 'ProShares UltraPro QQQ (3x)', base: 'QQQ', leverage: 3, fee: 0.0098, inceptYear: 2010, allowBackfill: true, backfillMinDate: '1985-10', trackingError: 0.0035, swapSpread: 0.0055, proxyType: 'leveraged' },
+      'SQQQ': { name: 'ProShares Short QQQ (-3x)', base: 'QQQ', leverage: -3, fee: 0.0095, inceptYear: 2010, allowBackfill: true, backfillMinDate: '1985-10', trackingError: 0.004, swapSpread: 0.0060, proxyType: 'leveraged' },
+      'SPY':  { name: 'SPDR S&P 500 ETF Trust', base: '^GSPC', leverage: 1, fee: 0.0009, inceptYear: 1993, allowBackfill: true, backfillMinDate: '1985-01', proxyType: 'index_tracking' },
+      'SSO':  { name: 'ProShares Ultra S&P500 (2x)', base: 'SPY', leverage: 2, fee: 0.0091, inceptYear: 2006, allowBackfill: true, backfillMinDate: '1985-01', trackingError: 0.0015, swapSpread: 0.0040, proxyType: 'leveraged' },
+      'UPRO': { name: 'ProShares UltraPro S&P500 (3x)', base: 'SPY', leverage: 3, fee: 0.0091, inceptYear: 2009, allowBackfill: true, backfillMinDate: '1985-01', trackingError: 0.003, swapSpread: 0.0050, proxyType: 'leveraged' },
+      'SMH':  { name: 'VanEck Semiconductor ETF', base: '^SOX', leverage: 1, fee: 0.0035, inceptYear: 2011, allowBackfill: true, backfillMinDate: '1993-12', proxyType: 'index_tracking' },
+      'SOXL': { name: 'Direxion Semi Bull 3X', base: 'SMH', leverage: 3, fee: 0.0094, inceptYear: 2010, allowBackfill: true, backfillMinDate: '1993-12', trackingError: 0.004, swapSpread: 0.0060, proxyType: 'leveraged' },
+      'SCHD': { name: 'Schwab U.S. Dividend Equity', base: null, leverage: 1, fee: 0.0006, inceptYear: 2011, allowBackfill: false, backfillMinDate: '2011-10', warningReason: '2011년 이전 백필 불가', proxyType: 'unsupported' },
+      'SPMO': { name: 'Invesco S&P 500 Momentum', base: '^SP500MUP', leverage: 1, fee: 0.0013, inceptYear: 2017, allowBackfill: true, backfillMinDate: '2017-10', proxyType: 'index_tracking' },
+      'JEPI': { name: 'JPMorgan Equity Premium', base: null, leverage: 1, fee: 0.0035, inceptYear: 2020, allowBackfill: false, backfillMinDate: '2020-05', warningReason: '2020년 이전 백필 불가', proxyType: 'unsupported' },
+      'TLT':  { name: 'iShares 20+ Year Treasury', base: '^TYX', leverage: 1, fee: 0.0015, inceptYear: 2002, allowBackfill: true, backfillMinDate: '2002-07', proxyType: 'index_tracking' },
+      'TMF':  { name: 'Direxion 20+ Yr Bull 3x', base: 'TLT', leverage: 3, fee: 0.0101, inceptYear: 2009, allowBackfill: true, backfillMinDate: '2002-07', trackingError: 0.003, swapSpread: 0.0050, proxyType: 'leveraged' },
+      'GLD':  { name: 'SPDR Gold Shares', base: 'GC=F', leverage: 1, fee: 0.0040, inceptYear: 2004, allowBackfill: true, backfillMinDate: '2004-11', proxyType: 'index_tracking' },
+      'ARKK': { name: 'ARK Innovation ETF', base: null, leverage: 1, fee: 0.0075, inceptYear: 2014, allowBackfill: false, backfillMinDate: '2014-10', warningReason: '2014년 이전 백필 불가', proxyType: 'unsupported' },
+      'IWM':  { name: 'iShares Russell 2000 ETF', base: '^RUT', leverage: 1, fee: 0.0019, inceptYear: 2000, allowBackfill: true, backfillMinDate: '1987-01', proxyType: 'index_tracking' },
+      'XLK':  { name: 'Technology Select SPDR', base: null, leverage: 1, fee: 0.0010, inceptYear: 1998, allowBackfill: true, backfillMinDate: '1998-12', proxyType: 'direct' },
+      'XLE':  { name: 'Energy Select SPDR', base: null, leverage: 1, fee: 0.0010, inceptYear: 1998, allowBackfill: true, backfillMinDate: '1998-12', proxyType: 'direct' },
+      'XBI':  { name: 'SPDR S&P Biotech ETF', base: '^SPSIBI', leverage: 1, fee: 0.0035, inceptYear: 2006, allowBackfill: true, backfillMinDate: '2006-01', proxyType: 'index_tracking' }
     };
 
     class QuantDataCache {
@@ -603,7 +605,6 @@
       }
     }
 
-    // 📌 [Fix] Kenneth French 공식 일별 CSV 실시간 파싱 및 연동 클래스
     class KennethFrenchFetcher {
       static async fetchOfficialFactors(startYear, endYear) {
         const cacheKey = `FF_FACTORS_${startYear}_${endYear}_v14_3_REAL_CSV`;
@@ -614,7 +615,6 @@
 
         const factorMap = new Map();
 
-        // Fama-French Daily CSV 데이터 원천 URL
         const csvUrls = [
           "https://raw.githubusercontent.com/PacktPublishing/Quantitative-Finance-with-R/master/Datasets/F-F_Research_Data_5_Factors_2x3_daily.CSV",
           "https://raw.githubusercontent.com/ashgreat/datasets/master/F-F_Research_Data_5_Factors_2x3_daily.csv"
@@ -635,7 +635,6 @@
               const parts = trimmed.split(/,|\s+/).filter(Boolean);
               const dateStr = parts[0];
 
-              // YYYYMMDD 포맷 체크
               if (/^\d{8}$/.test(dateStr)) {
                 const yyyy = dateStr.substring(0, 4);
                 const mm = dateStr.substring(4, 6);
@@ -1115,30 +1114,19 @@
             priceArr[i] = lastPrice;
           }
 
-          if (priceArr[0] === 0) {
-            let firstValid = 1.0;
-            for (let i = 0; i < N; i++) {
-              if (priceArr[i] > 0) { firstValid = priceArr[i]; break; }
-            }
-            for (let i = 0; i < N && priceArr[i] === 0; i++) priceArr[i] = firstValid;
-          }
-
           processedPrices[symbol] = priceArr;
           processedDivs[symbol] = divMap;
         });
 
+        // 📌 [Fix] SPY 대체(Fallback) 로직 완전 제거 및 backfillMinDate 기반 백필 제한 적용
         Object.keys(TICKER_UNIVERSE).forEach(ticker => {
           const config = TICKER_UNIVERSE[ticker];
           if (!config.allowBackfill || !config.base) return;
 
-          let basePrices = processedPrices[config.base];
-          let baseDivs = processedDivs[config.base];
-          
-          if (!basePrices || basePrices.every(p => p === 0)) {
-            basePrices = processedPrices['SPY'];
-            baseDivs = processedDivs['SPY'];
-          }
+          const basePrices = processedPrices[config.base];
+          const baseDivs = processedDivs[config.base];
 
+          // SPY 대체 로직 제거: 해당 종목의 기초 지수 데이터가 없으면 백필을 수행하지 않음
           if (!basePrices) return;
 
           const priceArr = processedPrices[ticker];
@@ -1154,8 +1142,17 @@
           }
 
           if (firstInceptIdx > 0) {
+            const minDate = config.backfillMinDate || '1985-01';
+
             for (let i = firstInceptIdx - 1; i >= 0; i--) {
               const dateStr = sortedDates[i];
+
+              // backfillMinDate 이전 기간은 백필하지 않고 0(데이터 없음) 처리
+              if (dateStr < minDate) {
+                priceArr[i] = 0;
+                continue;
+              }
+
               const baseCurr = basePrices[i + 1];
               const basePrev = basePrices[i];
 
@@ -1185,7 +1182,7 @@
                 const prevPrice = priceArr[i + 1] / (1.0 + synthSimpleReturn);
                 priceArr[i] = Math.max(0.001, prevPrice);
               } else {
-                priceArr[i] = Math.max(0.001, priceArr[i + 1] || 1.0);
+                priceArr[i] = 0;
               }
             }
           }
@@ -1826,7 +1823,7 @@
 
             let todayTotalValBeforeDeposit = 0;
             mixTickers.forEach(t => {
-              const pUsd = processedPrices[t] ? processedPrices[t][i] : 1.0;
+              const pUsd = processedPrices[t] ? processedPrices[t][i] : 0.0;
               todayTotalValBeforeDeposit += mixShares[t] * pUsd * fx;
             });
             if (todayTotalValBeforeDeposit > mixPeakVal) mixPeakVal = todayTotalValBeforeDeposit;
@@ -1866,11 +1863,11 @@
 
                 mixTickers.forEach(t => {
                   const targetKrw = currentVal * normWeights[t];
-                  const currentShareValKrw = mixShares[t] * (processedPrices[t] ? processedPrices[t][i] : 1.0) * fx;
+                  const currentShareValKrw = mixShares[t] * (processedPrices[t] ? processedPrices[t][i] : 0.0) * fx;
                   
                   const isBuying = targetKrw >= currentShareValKrw;
                   const effectiveFxRate = isBuying ? fx * (1 + fxSpreadRate) : fx * (1 - fxSpreadRate);
-                  const pUsd = (processedPrices[t] ? processedPrices[t][i] : 1.0);
+                  const pUsd = (processedPrices[t] ? processedPrices[t][i] : 0.0);
                   
                   if (pUsd > 0 && effectiveFxRate > 0) {
                     mixShares[t] = targetKrw / (pUsd * effectiveFxRate);
@@ -1880,7 +1877,7 @@
                 mixTickers.forEach(t => {
                   const allocKrw = depositKrw * normWeights[t];
                   const buyFx = fx * (1 + fxSpreadRate);
-                  const pUsd = (processedPrices[t] ? processedPrices[t][i] : 1.0);
+                  const pUsd = (processedPrices[t] ? processedPrices[t][i] : 0.0);
                   if (pUsd > 0 && buyFx > 0) {
                     mixShares[t] += allocKrw / (pUsd * buyFx);
                   }
@@ -1891,11 +1888,11 @@
 
               mixTickers.forEach(t => {
                 const targetKrw = currentVal * normWeights[t];
-                const currentShareValKrw = mixShares[t] * (processedPrices[t] ? processedPrices[t][i] : 1.0) * fx;
+                const currentShareValKrw = mixShares[t] * (processedPrices[t] ? processedPrices[t][i] : 0.0) * fx;
                 
                 const isBuying = targetKrw >= currentShareValKrw;
                 const effectiveFxRate = isBuying ? fx * (1 + fxSpreadRate) : fx * (1 - fxSpreadRate);
-                const pUsd = (processedPrices[t] ? processedPrices[t][i] : 1.0);
+                const pUsd = (processedPrices[t] ? processedPrices[t][i] : 0.0);
 
                 if (pUsd > 0 && effectiveFxRate > 0) {
                   mixShares[t] = targetKrw / (pUsd * effectiveFxRate);
@@ -1905,7 +1902,7 @@
 
             let todayTotalVal = 0;
             mixTickers.forEach(t => {
-              const pUsd = processedPrices[t] ? processedPrices[t][i] : 1.0;
+              const pUsd = processedPrices[t] ? processedPrices[t][i] : 0.0;
               todayTotalVal += mixShares[t] * pUsd * fx;
             });
 
@@ -2562,8 +2559,8 @@
           }`;
           
           const backfillTag = item.allowBackfill 
-            ? `<span class="text-[9px] bg-cyan-950 text-cyan-400 px-1 rounded font-semibold whitespace-nowrap">${item.inceptYear}년전 지수추종 백필</span>`
-            : `<span class="text-[9px] bg-rose-950 text-rose-400 px-1 rounded font-semibold whitespace-nowrap">${item.inceptYear}년전 현금보유</span>`;
+            ? `<span class="text-[9px] bg-cyan-950 text-cyan-400 px-1 rounded font-semibold whitespace-nowrap">${item.backfillMinDate} 지수추종 백필</span>`
+            : `<span class="text-[9px] bg-rose-950 text-rose-400 px-1 rounded font-semibold whitespace-nowrap">${item.backfillMinDate} 백필불가</span>`;
 
           label.innerHTML = `
             <input type="checkbox" id="chk-${ticker}" value="${ticker}" ${isChecked ? 'checked' : ''} onchange="UIController.toggleTicker('${ticker}')" aria-label="${ticker} 선택" class="accent-emerald-500">
@@ -2674,6 +2671,32 @@
           return;
         }
 
+        const activeMixes = this.customMixes.filter(m => m.enabled);
+
+        if (this.selectedTickers.length === 0 && activeMixes.length === 0) {
+          document.getElementById('summaryCards').innerHTML = '';
+          document.getElementById('summaryTableBody').innerHTML = `<tr><td colspan="16" class="px-4 py-6 text-center text-rose-400 whitespace-nowrap">분석할 개별 자산이나 활성화된 커스텀 믹스 전략을 선택하십시오.</td></tr>`;
+          return;
+        }
+
+        // 📌 [Fix] 백필 한계 검증 및 UI 경고 안내 팝업
+        const activeTickersSet = new Set(this.selectedTickers);
+        activeMixes.forEach(mix => {
+          if (mix.allocations) {
+            Object.keys(mix.allocations).forEach(t => activeTickersSet.add(t));
+          }
+        });
+
+        activeTickersSet.forEach(ticker => {
+          const config = TICKER_UNIVERSE[ticker];
+          if (config && config.backfillMinDate) {
+            if (startMonth < config.backfillMinDate) {
+              const [minY, minM] = config.backfillMinDate.split('-');
+              ToastNotifier.show(`⚠️ ${ticker}은(는) ${minY}년 ${parseInt(minM, 10)}월 이전 데이터가 존재하지 않아 ${minY}년부터만 성과가 반영됩니다.`, 'warning');
+            }
+          }
+        });
+
         const startYear = parseInt(startMonth.split('-')[0], 10);
         const endYear = parseInt(endMonth.split('-')[0], 10);
 
@@ -2690,14 +2713,6 @@
 
         if (mode === 'dynamicDCA') {
           investConfig.monthlyKrw = investConfig.smartMonthlyKrw;
-        }
-
-        const activeMixes = this.customMixes.filter(m => m.enabled);
-
-        if (this.selectedTickers.length === 0 && activeMixes.length === 0) {
-          document.getElementById('summaryCards').innerHTML = '';
-          document.getElementById('summaryTableBody').innerHTML = `<tr><td colspan="16" class="px-4 py-6 text-center text-rose-400 whitespace-nowrap">분석할 개별 자산이나 활성화된 커스텀 믹스 전략을 선택하십시오.</td></tr>`;
-          return;
         }
 
         this.setEngineStatus('loading', '데이터 시세 수신 중...');
@@ -2854,8 +2869,6 @@
       }
 
       static renderDashboard(results, sortedDates, taxEnabled) {
-        const startMonth = document.getElementById('startMonth').value;
-        const startYear = parseInt(startMonth.split('-')[0], 10);
         document.getElementById('thFinalVal').innerHTML = `${taxEnabled ? '실제 세후 평가금' : '세전 최종 평가금'} <button onclick="event.stopPropagation(); UIController.showMetricInfo('최종 평가금', '백테스트 종료 시점의 포트폴리오 최종 평가 금액입니다. 과세 옵션 적용 시 세금이 차감된 세후 실질 금액이 표시됩니다.')" class="text-emerald-600 hover:text-emerald-300 text-[11px] ml-0.5" title="도움말">ℹ️</button><span id="sort-finalVal"></span>`;
 
         const cardsContainer = document.getElementById('summaryCards');
@@ -2948,7 +2961,6 @@
         const summaryFragment = document.createDocumentFragment();
 
         const startMonth = document.getElementById('startMonth').value;
-        const startYear = parseInt(startMonth.split('-')[0], 10);
 
         const resArray = Object.values(results);
 
@@ -2969,8 +2981,8 @@
           const ticker = res.ticker;
           const isMix = ticker.startsWith('[MIX]');
           const config = TICKER_UNIVERSE[ticker];
-          const inceptYear = config?.inceptYear || 2000;
-          const isBackfilled = startYear < inceptYear;
+          const minDate = config?.backfillMinDate || '1985-01';
+          const isBackfilled = startMonth < minDate;
 
           let backfillBadge = '';
           if (isMix) {
@@ -2978,9 +2990,9 @@
           } else if (!isBackfilled) {
             backfillBadge = `<span class="text-[9px] bg-emerald-950/80 text-emerald-400 px-1 py-0.5 rounded border border-emerald-800/50 inline-block truncate max-w-full">실제 데이터 100%</span>`;
           } else if (config?.allowBackfill) {
-            backfillBadge = `<span class="text-[9px] bg-cyan-950/80 text-cyan-300 px-1 py-0.5 rounded border border-cyan-800/50 inline-block truncate max-w-full">지수추종 백필 (${inceptYear}년전)</span>`;
+            backfillBadge = `<span class="text-[9px] bg-cyan-950/80 text-cyan-300 px-1 py-0.5 rounded border border-cyan-800/50 inline-block truncate max-w-full">지수추종 백필 (${minDate}~)</span>`;
           } else {
-            backfillBadge = `<span class="text-[9px] bg-rose-950/80 text-rose-300 px-1 py-0.5 rounded border border-rose-800/50 inline-block truncate max-w-full">⚠️ 백필 제한 (${inceptYear}년전)</span>`;
+            backfillBadge = `<span class="text-[9px] bg-rose-950/80 text-rose-300 px-1 py-0.5 rounded border border-rose-800/50 inline-block truncate max-w-full">⚠️ 백필 제한 (${minDate}~)</span>`;
           }
 
           const score = res.score;

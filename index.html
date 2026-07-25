@@ -1459,6 +1459,11 @@
       }
     }
 
+/**
+ * v16.0 Institutional Grade Quantitative Rating Engine
+ * - 5-Axis Orthogonal Risk-Adjusted Scoring Architecture
+ * - Sigmoidal Normalization, RMS Pain Distortion, Dynamic Weight Calibration
+ */
 class QuantScoreEngine {
   static calculatePeriodMonths(startMonth, endMonth) {
     const [sY, sM] = startMonth.split('-').map(Number);
@@ -1473,65 +1478,106 @@ class QuantScoreEngine {
   }
 
   /**
-   * v15.1 Refactored Orthogonal Score Engine
-   * - 하방 효율성(Sortino) 단일 축 정제 (Calmar 중복 제거)
-   * - 몬테카를로 미실행 시 동적 가중치 정규화(Dynamic Weight Normalization) 적용
-   * - 실전 시장 분포 기준 Ulcer(6.0) 및 CVaR 95%(5.0) 분모 스케일 캘리브레이션
-   * - 포화형 스무딩 기간 가중치 곡선 적용
+   * 기관급 5축 합성 점수 산출
    */
   static calculateScore(res, periodMonths = 180, avgRfAnnPercent = 3.5) {
     if (!res) return 0;
 
-    const xirr = res.annualizedXIRR || 0;
+    // -------------------------------------------------------------
+    // 입력 지표 추출 및 안전 검증 (Safe Default Falling)
+    // -------------------------------------------------------------
+    const xirr = isNaN(res.annualizedXIRR) ? 0 : res.annualizedXIRR;
     const sortino = Math.max(0, isNaN(res.sortino) ? 0 : res.sortino);
+    const omega = Math.max(0, isNaN(res.omega) ? 0 : res.omega);
+    const painRatio = Math.max(0, isNaN(res.painRatio) ? 0 : res.painRatio);
     const ulcer = Math.max(0, isNaN(res.ulcerIndex) ? 0 : res.ulcerIndex);
     const cvar95 = Math.max(0, isNaN(res.cvar95) ? 0 : res.cvar95);
+    const mdd = Math.max(0, isNaN(res.twrMdd) ? 0 : res.twrMdd);
     const infoRatio = isNaN(res.informationRatio) ? 0 : res.informationRatio;
+    const alpha = (res.ff && !isNaN(res.ff.alpha)) ? res.ff.alpha : 0;
 
-    // 1. 수익성 축 (sReturn: 최대 35점)
+    // -------------------------------------------------------------
+    // [Axis 1] 초과 수익성 및 알파 효율성 (Yield & Alpha Generation)
+    // -------------------------------------------------------------
     const excessReturn = xirr - avgRfAnnPercent;
-    let sReturn = 0;
-    if (xirr <= 0) {
-      sReturn = Math.max(0, 5 * (1 + xirr / 100));
-    } else {
-      sReturn = 35.0 * (2.0 / (1.0 + Math.exp(-0.09 * excessReturn)) - 1.0);
-      sReturn = Math.max(0, Math.min(35.0, sReturn));
-    }
+    // Sigmoidal Soft-Clipping (중앙값 12% 근처에서 민감하게 반응, 최대 25점)
+    let phi1_Return = 25.0 * (2.0 / (1.0 + Math.exp(-0.085 * excessReturn)) - 1.0);
+    phi1_Return = Math.max(0, Math.min(25.0, phi1_Return));
 
-    // 2. 하방 효율성 축 (sDownside: 최대 25점) - Calmar 중복 제거 후 Sortino 단일 축 정제
-    const sDownside = 25.0 * (1.0 - Math.exp(-0.85 * sortino));
+    // Alpha 보정 가산점 (최대 5점)
+    const phi1_Alpha = 5.0 / (1.0 + Math.exp(-0.4 * alpha));
+    const scoreAxis1 = Math.min(25.0, phi1_Return + phi1_Alpha);
 
-    // 3. 고통 및 극단 위험 감점 축 (pStress: 최대 20점) - 스케일 캘리브레이션 적용
-    const normUlcer = ulcer / 6.0;   // Ulcer Index 일반적 상한선 6.0 반영
-    const normCvar = cvar95 / 5.0;     // 일별/월별 CVaR 95% 위험 기준선 5.0% 반영
-    const rmsStress = Math.sqrt(0.5 * Math.pow(normUlcer, 2) + 0.5 * Math.pow(normCvar, 2));
-    const pStress = 20.0 * (1.0 - Math.exp(-1.2 * rmsStress));
+    // -------------------------------------------------------------
+    // [Axis 2] 하방 위험조정 효율성 (Downside Asymmetry & Quality)
+    // -------------------------------------------------------------
+    // Sortino, Omega, Pain Ratio의 조화로운 결합
+    const phi2_Sortino = 1.0 - Math.exp(-0.65 * sortino);
+    const phi2_Omega = 1.0 - Math.exp(-0.80 * Math.max(0, omega - 1.0));
+    const phi2_Pain = 1.0 - Math.exp(-0.50 * painRatio);
 
-    // 4. 알파 및 추종 효율 보조 축 (sAlpha: 최대 10점)
-    const sAlpha = 10.0 / (1.0 + Math.exp(-0.8 * infoRatio));
+    // 복합 하방 효율 점수 (최대 25점)
+    const scoreAxis2 = 25.0 * (0.50 * phi2_Sortino + 0.30 * phi2_Omega + 0.20 * phi2_Pain);
 
-    // 5. 몬테카를로 경로 안정성 축 (sMonteCarlo: 최대 15점) 및 동적 정규화
-    let sMonteCarlo = 0;
-    let maxAvailableScore = 70.0; // 기본 3개 축 만점 합계 (35 + 25 + 10)
+    // -------------------------------------------------------------
+    // [Axis 3] 직교 고통 및 Drawdown 체감 구조 (Drawdown & Ulcer Architecture)
+    // -------------------------------------------------------------
+    // Ulcer Index(기간+깊이)와 MDD(최대 깊이) 스케일 정규화
+    const normUlcer = ulcer / 5.5; // 실전 데이터 95백분위 기준 5.5
+    const normMdd = mdd / 35.0;    // 테일 임계 낙폭 35.0%
+
+    // RMS(Root Mean Square) 직교 결합으로 중복 감점 방지
+    const rmsDrawdownPain = Math.sqrt(0.6 * Math.pow(normUlcer, 2) + 0.4 * Math.pow(normMdd, 2));
+    
+    // 지수적 고통 패널티 (Max 20점 잔여점수)
+    const scoreAxis3 = 20.0 * Math.exp(-1.15 * rmsDrawdownPain);
+
+    // -------------------------------------------------------------
+    // [Axis 4] 극단 꼬리위험 및 테일 방어력 (Tail Risk Protection)
+    // -------------------------------------------------------------
+    // CVaR 95% 손실 수준과 Information Ratio 기반 방어 평가
+    const normCVaR = cvar95 / 4.5; // 일별 5% 최악 구간의 예상 손실율 정규화
+    const phi4_Tail = Math.exp(-1.0 * normCVaR);
+    const phi4_IR = 1.0 / (1.0 + Math.exp(-0.75 * infoRatio));
+
+    const scoreAxis4 = 15.0 * (0.70 * phi4_Tail + 0.30 * phi4_IR);
+
+    // -------------------------------------------------------------
+    // [Axis 5] 몬테카를로 경로 확률 안정성 (Stochastic Robustness)
+    // -------------------------------------------------------------
+    let scoreAxis5 = 0.0;
+    let isMonteCarloActive = false;
 
     if (res.monteCarlo && res.monteCarlo.p50 > 0) {
+      isMonteCarloActive = true;
       const p5 = res.monteCarlo.p5;
       const p50 = res.monteCarlo.p50;
-      const mcRatio = Math.max(0, p5 / p50);
-      sMonteCarlo = 15.0 * Math.min(1.0, Math.max(0, mcRatio / 0.60));
-      maxAvailableScore += 15.0; // 몬테카를로 포함 시 85.0으로 확장
+      
+      // 최악의 경로(P5)가 중간 기대값(P50) 대비 방어되는 비율
+      const mcStabilityRatio = Math.max(0, p5 / p50);
+      
+      // 0.55 이상 유지시 만점 부여
+      scoreAxis5 = 15.0 * Math.min(1.0, Math.max(0, mcStabilityRatio / 0.55));
     }
 
-    // 순수 획득 점수
-    const rawEarned = Math.max(0, (sReturn + sDownside + sAlpha + sMonteCarlo) - pStress);
+    // -------------------------------------------------------------
+    // 동적 가중치 정규화 (Dynamic Weight Normalization)
+    // -------------------------------------------------------------
+    const rawTotalEarned = scoreAxis1 + scoreAxis2 + scoreAxis3 + scoreAxis4 + scoreAxis5;
+    const maxPossibleScore = isMonteCarloActive ? 100.0 : 85.0;
 
-    // Dynamic Weight Normalization (100점 만점 환산)
-    const normalizedScore = (rawEarned / maxAvailableScore) * 100.0;
+    // 100점 만점으로 스케일 변환
+    let normalizedScore = (rawTotalEarned / maxPossibleScore) * 100.0;
 
-    // 6. 기간 안정성 가중치 (fTime) - 완만한 포화형 스무딩 곡선
-    const fTime = 0.55 + 0.45 * (1.0 - Math.exp(-Math.max(1, periodMonths) / 20.0));
+    // -------------------------------------------------------------
+    // 표본 신뢰도 및 기간 보정 함수 (Sample Size Horizon Calibration)
+    // -------------------------------------------------------------
+    // 24개월 미만 단기 백테스트의 과적합(Overfitting) 방지 포화 곡선
+    const fSample = 1.0 - Math.exp(-Math.max(1, periodMonths) / 22.0);
+    
+    // 최종 0 ~ 100점 바운딩
+    const finalScore = Math.max(0, Math.min(100.0, normalizedScore * fSample));
 
-    const finalScore = Math.max(0, Math.min(100, normalizedScore * fTime));
     return Math.round(finalScore * 10) / 10;
   }
 }

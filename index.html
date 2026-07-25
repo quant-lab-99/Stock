@@ -2602,12 +2602,28 @@
 
         this.customMixes.forEach(mix => {
           const card = document.createElement('div');
-          card.className = `p-3.5 rounded-xl border transition ${mix.enabled ? 'bg-slate-950/80 border-amber-500/50' : 'bg-slate-950/40 border-slate-800 opacity-60'}`;
+          const tickers = Object.keys(mix.allocations || {});
 
-          const tickers = Object.keys(mix.allocations);
+          // 🚫 믹스 내부 종목 중 하나라도 백필 불가 및 시작월 미지원인지 검증
+          const invalidTickersInMix = tickers.filter(t => {
+            const cfg = TICKER_UNIVERSE[t];
+            const minDate = cfg?.backfillMinDate || cfg?.inceptDate;
+            return cfg && !cfg.allowBackfill && currentStartMonth < minDate;
+          });
+
+          const isMixDisabledByDate = invalidTickersInMix.length > 0;
+          const isChecked = mix.enabled && !isMixDisabledByDate;
+
+          card.className = `p-3.5 rounded-xl border transition ${
+            isMixDisabledByDate 
+              ? 'bg-slate-950/40 border-rose-900/40 opacity-50' 
+              : isChecked 
+                ? 'bg-slate-950/80 border-amber-500/50' 
+                : 'bg-slate-950/40 border-slate-800 opacity-60'
+          }`;
+
           let sumW = 0;
           tickers.forEach(t => sumW += (mix.allocations[t] || 0));
-
           const unusedTickers = Object.keys(TICKER_UNIVERSE).filter(t => !tickers.includes(t));
           const safeMixName = QuantUtils.escapeHTML(mix.name);
 
@@ -2615,8 +2631,9 @@
             <div class="flex flex-col gap-3">
               <div class="flex items-center justify-between gap-2 flex-wrap">
                 <div class="flex items-center gap-2">
-                  <input type="checkbox" ${mix.enabled ? 'checked' : ''} onchange="UIController.toggleMixEnabled('${mix.id}')" aria-label="전략 활성화" class="accent-amber-500 w-4 h-4 cursor-pointer">
+                  <input type="checkbox" ${isChecked ? 'checked' : ''} ${isMixDisabledByDate ? 'disabled' : ''} onchange="UIController.toggleMixEnabled('${mix.id}')" aria-label="전략 활성화" class="accent-amber-500 w-4 h-4 cursor-pointer disabled:opacity-30">
                   <input type="text" value="${safeMixName}" onchange="UIController.updateMixName('${mix.id}', this.value)" aria-label="전략 이름" class="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs font-bold text-amber-300 focus:border-amber-500 min-w-[160px]">
+                  ${isMixDisabledByDate ? `<span class="text-[10px] bg-rose-950 text-rose-300 border border-rose-800 px-1.5 py-0.5 rounded font-bold whitespace-nowrap">🚫 시작월 미지원 종목 포함 (${invalidTickersInMix.join(', ')})</span>` : ''}
                 </div>
                 
                 <div class="flex items-center gap-2 max-w-full flex-wrap">
@@ -3035,7 +3052,19 @@
           return;
         }
 
-        const activeMixes = this.customMixes.filter(m => m.enabled);
+        // 믹스 활성화 체크 + 시작월 백필 불가 종목 포함 믹스 자동 연산 제외
+        const activeMixes = this.customMixes.filter(mix => {
+          if (!mix.enabled) return false;
+          
+          const tickers = Object.keys(mix.allocations || {});
+          const hasInvalidTicker = tickers.some(t => {
+            const cfg = TICKER_UNIVERSE[t];
+            const minDate = cfg?.backfillMinDate || cfg?.inceptDate;
+            return cfg && !cfg.allowBackfill && startMonth < minDate;
+          });
+
+          return !hasInvalidTicker;
+        });
 
         if (this.selectedTickers.length === 0 && activeMixes.length === 0) {
           document.getElementById('summaryCards').innerHTML = '';
@@ -3043,12 +3072,8 @@
           return;
         }
 
-        // ------------------------------------------------------------------
-        // 🚫 [핵심 검증 Engine] 백필 불가능 종목 시점 검증 및 차단 logic
-        // ------------------------------------------------------------------
+        // 개별 선택 자산 백필 불가 검증
         const invalidAssets = [];
-
-        // 1) 개별 선택 자산 검증
         this.selectedTickers.forEach(ticker => {
           const config = TICKER_UNIVERSE[ticker];
           const minDate = config?.backfillMinDate || config?.inceptDate || '2000-01';
@@ -3057,31 +3082,12 @@
           }
         });
 
-        // 2) 커스텀 믹스 자산 검증
-        activeMixes.forEach(mix => {
-          if (mix.allocations) {
-            Object.keys(mix.allocations).forEach(ticker => {
-              const config = TICKER_UNIVERSE[ticker];
-              const minDate = config?.backfillMinDate || config?.inceptDate || '2000-01';
-              if (config && !config.allowBackfill && startMonth < minDate) {
-                if (!invalidAssets.some(a => a.ticker === ticker)) {
-                  invalidAssets.push({ ticker, minDate, reason: config.warningReason || '백필 불가', mixName: mix.name });
-                }
-              }
-            });
-          }
-        });
-
-        // 3) 백필 불가 종목 감지 시 실행 중단 및 자동 수정 안내
         if (invalidAssets.length > 0) {
           const latestRequiredMinDate = invalidAssets.reduce((max, item) => item.minDate > max ? item.minDate : max, '1985-01');
-          
           this.showBackfillErrorModal(invalidAssets, latestRequiredMinDate);
-          
           this.setEngineStatus('error', '백테스트 실행 중단됨');
-          return; // ❌ 연산 중단! 왜곡된 결과 생성을 막습니다.
+          return;
         }
-        // ------------------------------------------------------------------
 
         const warningList = [];
         this.selectedTickers.forEach(ticker => {
@@ -3163,10 +3169,15 @@
           }
         });
 
-        Array.from(requiredSet).forEach(t => {
-          const cfg = TICKER_UNIVERSE[t];
-          if (cfg?.base) requiredSet.add(cfg.base);
-        });
+        // 레버리지 2단계 베이스 지수(^NDX, ^GSPC 등)까지 재귀적으로 끝까지 찾아내어 수신
+        let previousSize = 0;
+        while (requiredSet.size !== previousSize) {
+          previousSize = requiredSet.size;
+          Array.from(requiredSet).forEach(t => {
+            const cfg = TICKER_UNIVERSE[t];
+            if (cfg?.base) requiredSet.add(cfg.base);
+          });
+        }
 
         const fullTickers = Array.from(requiredSet);
 
@@ -3482,7 +3493,8 @@
 
           for (let i = 0; i < sortedDates.length; i += step) {
             labels.push(sortedDates[i]);
-            sampledInvested.push(Math.max(1, results[firstTicker].investedSeries[i]));
+            const inv = results[firstTicker].investedSeries[i];
+            sampledInvested.push(inv > 0 ? inv : null);
           }
 
           datasets.push({
@@ -3491,14 +3503,16 @@
             borderColor: '#475569',
             borderDash: [3, 3],
             pointRadius: 0,
-            borderWidth: 1.5
+            borderWidth: 1.5,
+            spanGaps: false
           });
 
           let colorIdx = 0;
           Object.entries(results).forEach(([ticker, res]) => {
             const sampledData = [];
             for (let i = 0; i < sortedDates.length; i += step) {
-              sampledData.push(Math.max(1, res.portfolioValues[i]));
+              const val = res.portfolioValues[i];
+              sampledData.push(val > 0 ? val : null);
             }
             const isMix = ticker.startsWith('[MIX]');
             
@@ -3507,7 +3521,8 @@
               data: sampledData,
               borderColor: palette[colorIdx % palette.length],
               borderWidth: isMix ? 2.5 : 1.5,
-              pointRadius: 0
+              pointRadius: 0,
+              spanGaps: false
             });
             colorIdx++;
           });

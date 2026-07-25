@@ -1987,60 +1987,60 @@
       }
     }
 
-    // 📌 [수정 완료] queueMicrotask 기반 마이크로태스크 병합 ReactiveStore
-    class ReactiveStore {
-      constructor(initialData, onChange) {
-        this.onChange = onChange;
-        this.silentSync = false;
-        this.notifyPending = false;
-        this.state = this._makeReactive(initialData);
+class ReactiveStore {
+  constructor(initialData, onChange) {
+    this.onChange = onChange;
+    this.silentSync = false;
+    this.notifyPending = false; // 중복 호출 방지 플래그
+    this.state = this._makeReactive(initialData);
+  }
+
+  // 상태 변경 이벤트를 마이크로태스크 큐로 병합 처리
+  notify() {
+    if (this.silentSync) {
+      try {
+        localStorage.setItem('quant_custom_mixes_v14_3', JSON.stringify(this.state));
+      } catch(e) {
+        console.error("[ReactiveStore] Storage Write Failed", e);
       }
-
-      notify() {
-        if (this.silentSync) {
-          try {
-            localStorage.setItem('quant_custom_mixes_v14_3', JSON.stringify(this.state));
-          } catch(e) {
-            console.error("[ReactiveStore] Storage Write Failed", e);
-          }
-          return;
-        }
-
-        if (this.notifyPending) return;
-        this.notifyPending = true;
-
-        queueMicrotask(() => {
-          this.notifyPending = false;
-          try {
-            localStorage.setItem('quant_custom_mixes_v14_3', JSON.stringify(this.state));
-            if (typeof this.onChange === 'function') {
-              this.onChange(this.state);
-            }
-          } catch(e) {
-            console.error("[ReactiveStore] Notification Failed", e);
-          }
-        });
-      }
-
-      _makeReactive(obj) {
-        const self = this;
-        return new Proxy(obj, {
-          set(target, prop, value) {
-            if (target[prop] === value) return true;
-            target[prop] = value;
-            self.notify();
-            return true;
-          },
-          deleteProperty(target, prop) {
-            if (prop in target) {
-              delete target[prop];
-              self.notify();
-            }
-            return true;
-          }
-        });
-      }
+      return;
     }
+
+    if (this.notifyPending) return;
+    this.notifyPending = true;
+
+    queueMicrotask(() => {
+      this.notifyPending = false;
+      try {
+        localStorage.setItem('quant_custom_mixes_v14_3', JSON.stringify(this.state));
+        if (typeof this.onChange === 'function') {
+          this.onChange(this.state);
+        }
+      } catch(e) {
+        console.error("[ReactiveStore] Notification Failed", e);
+      }
+    });
+  }
+
+  _makeReactive(obj) {
+    const self = this;
+    return new Proxy(obj, {
+      set(target, prop, value) {
+        if (target[prop] === value) return true; // 값 변동 없으면 무시
+        target[prop] = value;
+        self.notify();
+        return true;
+      },
+      deleteProperty(target, prop) {
+        if (prop in target) {
+          delete target[prop];
+          self.notify();
+        }
+        return true;
+      }
+    });
+  }
+}
 
     class UIController {
       static selectedTickers = ['QQQ', 'QLD'];
@@ -2082,6 +2082,11 @@
         }
 
         this.customMixesStore = new ReactiveStore(initialMixes, (updatedState) => {
+          try {
+            localStorage.setItem('quant_custom_mixes_v14_3', JSON.stringify(updatedState));
+          } catch(e) {
+            console.warn("LocalStorage 쓰기 차단됨", e);
+          }
           this.renderMixStrategiesUI();
         });
 
@@ -2403,7 +2408,6 @@
         const months = QuantScoreEngine.calculatePeriodMonths(startMonth, endMonth);
         const periodCat = QuantScoreEngine.getPeriodCategory(months);
 
-        // 📌 닉네임 유효성 검사 강화
         let rawAuthor = prompt("리더보드에 보여줄 닉네임을 입력하세요 (1~12자):", "익명");
         if (rawAuthor === null) return;
         
@@ -2697,27 +2701,37 @@
           return;
         }
 
-        const activeTickersSet = new Set(this.selectedTickers);
-        activeMixes.forEach(mix => {
-          if (mix.allocations) {
-            Object.keys(mix.allocations).forEach(t => activeTickersSet.add(t));
+        // --- 경고 메시지 로직 개선: 개별 자산과 믹스 전략 구분 ---
+        const warningList = [];
+
+        // 1. 개별 선택 자산 검사
+        this.selectedTickers.forEach(ticker => {
+          const config = TICKER_UNIVERSE[ticker];
+          if (config && config.backfillMinDate && startMonth < config.backfillMinDate) {
+            const [minY, minM] = config.backfillMinDate.split('-');
+            warningList.push(`<span class="text-emerald-400 font-bold">[개별]</span> <b>${ticker}</b> (${minY}년 ${parseInt(minM, 10)}월~)`);
           }
         });
 
-        const warningList = [];
-        activeTickersSet.forEach(ticker => {
-          const config = TICKER_UNIVERSE[ticker];
-          if (config && config.backfillMinDate) {
-            if (startMonth < config.backfillMinDate) {
-              const [minY, minM] = config.backfillMinDate.split('-');
-              warningList.push(`<b>${ticker}</b> (${minY}년 ${parseInt(minM, 10)}월~)`);
-            }
+        // 2. 활성화된 믹스 전략 자산 검사
+        activeMixes.forEach(mix => {
+          if (mix.allocations) {
+            Object.keys(mix.allocations).forEach(ticker => {
+              const config = TICKER_UNIVERSE[ticker];
+              if (config && config.backfillMinDate && startMonth < config.backfillMinDate) {
+                const [minY, minM] = config.backfillMinDate.split('-');
+                const itemText = `<span class="text-amber-400 font-bold">[믹스: ${QuantUtils.escapeHTML(mix.name)}]</span> <b>${ticker}</b> (${minY}년 ${parseInt(minM, 10)}월~)`;
+                if (!warningList.includes(itemText)) {
+                  warningList.push(itemText);
+                }
+              }
+            });
           }
         });
 
         let banner = document.getElementById('backfillWarningBanner');
         if (warningList.length > 0) {
-          const msg = `⚠️ 선택한 시작 월(${startMonth}) 이전 데이터가 없는 종목이 포함되어 있어 <b>표기된 시점부터만 성과가 반영</b>됩니다:<br><span class="mt-1 block text-slate-300">${warningList.join(' · ')}</span>`;
+          const msg = `⚠️ 선택한 시작 월(${startMonth}) 이전 데이터가 없는 종목이 포함되어 있어 <b>표기된 시점부터만 성과가 반영</b>됩니다:<br><span class="mt-1 block text-slate-300 leading-relaxed">${warningList.join(' · ')}</span>`;
           
           ToastNotifier.show(`⚠️ 설정한 시작일(${startMonth}) 이전 데이터가 없는 종목이 포함되어 있습니다. 상세 목록은 화면 상단 경고창을 확인하세요.`, 'warning');
 

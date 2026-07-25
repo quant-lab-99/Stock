@@ -689,9 +689,6 @@
               const parts = trimmed.split(/,|\s+/).filter(Boolean);
               const dateStr = parts[0];
 
-              // [수정 반영] Kenneth French 일별 CSV 헤더 및 컬럼 수에 맞춘 정밀 파싱
-              // 5-Factor 규격: [Date, Mkt-RF, SMB, HML, RMW, CMA, RF] -> 총 7개 컬럼 (RF는 Index 6)
-              // 3-Factor 규격: [Date, Mkt-RF, SMB, HML, RF] -> 총 5개 컬럼 (RF는 Index 4)
               if (/^\d{8}$/.test(dateStr)) {
                 const yyyy = dateStr.substring(0, 4);
                 const mm = dateStr.substring(4, 6);
@@ -710,7 +707,6 @@
                   } else if (parts.length === 5) {
                     rf = parseFloat(parts[4]) / 100.0 || 0;
                   } else if (parts.length > 5) {
-                    // 예외적인 컬럼 수인 경우 마지막 항목을 RF로 세이프가드 처리
                     rf = parseFloat(parts[parts.length - 1]) / 100.0 || 0;
                   }
 
@@ -2317,6 +2313,64 @@
         modal.classList.remove('hidden');
       }
 
+      static showBackfillErrorModal(invalidAssets, suggestedMinDate) {
+        let modal = document.getElementById('backfillErrorModal');
+        if (!modal) {
+          modal = document.createElement('div');
+          modal.id = 'backfillErrorModal';
+          modal.className = 'fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4';
+          document.body.appendChild(modal);
+        }
+
+        const assetItems = invalidAssets.map(a => 
+          `<li class="flex justify-between items-center bg-slate-950 p-2 rounded border border-rose-900/50">
+            <span class="font-bold text-rose-300">${a.ticker} ${a.mixName ? `<span class="text-xs text-slate-400">(${a.mixName})</span>` : ''}</span>
+            <span class="text-xs text-amber-400 font-semibold">${a.minDate} 이후만 가능</span>
+          </li>`
+        ).join('');
+
+        modal.innerHTML = `
+          <div class="bg-slate-900 border border-rose-500/50 rounded-2xl p-5 max-w-lg w-full shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 class="font-bold text-base text-rose-400 flex items-center gap-2">
+                🚫 백테스트 실행 불가 안내
+              </h3>
+              <button onclick="document.getElementById('backfillErrorModal').classList.add('hidden')" class="text-slate-400 hover:text-slate-100 text-lg font-bold">&times;</button>
+            </div>
+
+            <p class="text-xs text-slate-300 leading-relaxed">
+              선택하신 시작 월(<b class="text-amber-300">${document.getElementById('startMonth').value}</b>)에 <b>과거 지수 백필을 지원하지 않는 자산</b>이 포함되어 있어 연산이 중단되었습니다:
+            </p>
+
+            <ul class="space-y-1.5 text-xs">
+              ${assetItems}
+            </ul>
+
+            <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 text-xs text-slate-400 leading-relaxed">
+              💡 <b>해결 방법:</b> 시작 월을 <b class="text-emerald-400">${suggestedMinDate}</b> 이후로 변경하시거나, 해당 ETF/믹스를 해제 후 실행하세요.
+            </div>
+
+            <div class="flex gap-2 justify-end pt-2">
+              <button onclick="document.getElementById('backfillErrorModal').classList.add('hidden')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-4 py-2 rounded-lg transition">
+                닫기
+              </button>
+              <button onclick="UIController.autoFixStartMonth('${suggestedMinDate}')" class="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs px-4 py-2 rounded-lg transition">
+                🗓️ 시작 월을 ${suggestedMinDate}로 자동 수정 후 실행
+              </button>
+            </div>
+          </div>
+        `;
+
+        modal.classList.remove('hidden');
+      }
+
+      static autoFixStartMonth(newMinDate) {
+        document.getElementById('startMonth').value = newMinDate;
+        document.getElementById('backfillErrorModal').classList.add('hidden');
+        ToastNotifier.show(`시작 월이 ${newMinDate}로 자동 조정되었습니다. 시뮬레이션을 다시 시작합니다.`, "success");
+        this.runBacktest();
+      }
+
       static handleSort(field) {
         if (this.sortField === field) {
           this.sortOrder = this.sortOrder === 'asc' ? 'desc' : 'asc';
@@ -2795,6 +2849,8 @@
         const grid = document.getElementById('modalCheckboxGrid');
         const fragment = document.createDocumentFragment();
 
+        const currentStartMonth = document.getElementById('startMonth').value;
+
         for (const [ticker, item] of Object.entries(TICKER_UNIVERSE)) {
           const isChecked = this.selectedTickers.includes(ticker);
           const label = document.createElement('label');
@@ -2803,10 +2859,15 @@
             isChecked ? 'bg-emerald-950/60 border-emerald-500/80 text-emerald-300' : 'bg-slate-950 border-slate-800 text-slate-500 hover:border-slate-700'
           }`;
           
-          const inceptDate = item.inceptDate || `${item.inceptYear}-01`;
+          const inceptDate = item.inceptDate || `${item.inceptYear || 2000}-01`;
+          const minDate = item.backfillMinDate || inceptDate;
+          const isUnavailable = !item.allowBackfill && currentStartMonth < minDate;
+
           const backfillTag = item.allowBackfill 
-            ? `<span class="text-[9px] bg-cyan-950 text-cyan-400 px-1 rounded font-semibold whitespace-nowrap">상장:${inceptDate} (백필:${item.backfillMinDate}~)</span>`
-            : `<span class="text-[9px] bg-rose-950 text-rose-400 px-1 rounded font-semibold whitespace-nowrap">상장:${inceptDate} (백필불가)</span>`;
+            ? `<span class="text-[9px] bg-cyan-950 text-cyan-400 px-1 rounded font-semibold whitespace-nowrap">상장:${inceptDate}</span>`
+            : isUnavailable
+              ? `<span class="text-[9px] bg-rose-950 text-rose-300 border border-rose-800 px-1 rounded font-bold whitespace-nowrap">🚫 선택불가 (${minDate}~)</span>`
+              : `<span class="text-[9px] bg-slate-800 text-slate-300 px-1 rounded font-semibold whitespace-nowrap">상장:${inceptDate}</span>`;
 
           label.innerHTML = `
             <input type="checkbox" id="chk-${ticker}" value="${ticker}" ${isChecked ? 'checked' : ''} onchange="UIController.toggleTicker('${ticker}')" aria-label="${ticker} 선택" class="accent-emerald-500">
@@ -2925,11 +2986,51 @@
           return;
         }
 
+        // ------------------------------------------------------------------
+        // 🚫 [핵심 검증 Engine] 백필 불가능 종목 시점 검증 및 차단 logic
+        // ------------------------------------------------------------------
+        const invalidAssets = [];
+
+        // 1) 개별 선택 자산 검증
+        this.selectedTickers.forEach(ticker => {
+          const config = TICKER_UNIVERSE[ticker];
+          const minDate = config?.backfillMinDate || config?.inceptDate || '2000-01';
+          if (config && !config.allowBackfill && startMonth < minDate) {
+            invalidAssets.push({ ticker, minDate, reason: config.warningReason || '백필 불가' });
+          }
+        });
+
+        // 2) 커스텀 믹스 자산 검증
+        activeMixes.forEach(mix => {
+          if (mix.allocations) {
+            Object.keys(mix.allocations).forEach(ticker => {
+              const config = TICKER_UNIVERSE[ticker];
+              const minDate = config?.backfillMinDate || config?.inceptDate || '2000-01';
+              if (config && !config.allowBackfill && startMonth < minDate) {
+                if (!invalidAssets.some(a => a.ticker === ticker)) {
+                  invalidAssets.push({ ticker, minDate, reason: config.warningReason || '백필 불가', mixName: mix.name });
+                }
+              }
+            });
+          }
+        });
+
+        // 3) 백필 불가 종목 감지 시 실행 중단 및 자동 수정 안내
+        if (invalidAssets.length > 0) {
+          const latestRequiredMinDate = invalidAssets.reduce((max, item) => item.minDate > max ? item.minDate : max, '1985-01');
+          
+          this.showBackfillErrorModal(invalidAssets, latestRequiredMinDate);
+          
+          this.setEngineStatus('error', '백테스트 실행 중단됨');
+          return; // ❌ 연산 중단! 왜곡된 결과 생성을 막습니다.
+        }
+        // ------------------------------------------------------------------
+
         const warningList = [];
         this.selectedTickers.forEach(ticker => {
           const config = TICKER_UNIVERSE[ticker];
           const inceptDate = config?.inceptDate || `${config?.inceptYear || 2000}-01`;
-          if (config && startMonth < inceptDate) {
+          if (config && config.allowBackfill && startMonth < inceptDate) {
             const [inceptY, inceptM] = inceptDate.split('-');
             warningList.push(`<span class="text-emerald-400 font-bold">[개별]</span> <b>${ticker}</b> (상장: ${inceptY}년 ${parseInt(inceptM, 10)}월~)`);
           }
@@ -2940,7 +3041,7 @@
             Object.keys(mix.allocations).forEach(ticker => {
               const config = TICKER_UNIVERSE[ticker];
               const inceptDate = config?.inceptDate || `${config?.inceptYear || 2000}-01`;
-              if (config && startMonth < inceptDate) {
+              if (config && config.allowBackfill && startMonth < inceptDate) {
                 const [inceptY, inceptM] = inceptDate.split('-');
                 const itemText = `<span class="text-amber-400 font-bold">[믹스: ${QuantUtils.escapeHTML(mix.name)}]</span> <b>${ticker}</b> (상장: ${inceptY}년 ${parseInt(inceptM, 10)}월~)`;
                 if (!warningList.includes(itemText)) {

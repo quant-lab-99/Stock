@@ -209,10 +209,10 @@
       <div class="flex justify-between items-center flex-wrap gap-2">
         <div>
           <h3 class="text-xs font-bold text-amber-400 flex items-center gap-1.5 whitespace-nowrap">
-            🏆 포트폴리오 전략 리더보드
+            🏆 포트폴리오 전략 리더보드 (Top 100)
           </h3>
           <p class="text-[11px] text-slate-400 mt-0.5">
-            사용자들이 등록한 기간별 포트폴리오 성과 랭킹입니다.
+            사용자들이 등록한 기간별 포트폴리오 성과 랭킹입니다. (상위 100위까지 수신)
           </p>
         </div>
 
@@ -244,6 +244,16 @@
             <tr><td colspan="10" class="px-4 py-6 text-center text-slate-500 whitespace-nowrap">리더보드 동기화 중...</td></tr>
           </tbody>
         </table>
+      </div>
+
+      <!-- 리더보드 하단 컨트롤 (더보기 버튼 & 내 전략 순위 안내) -->
+      <div id="leaderboardFooter" class="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 text-xs border-t border-slate-800/80">
+        <div id="myStrategyRankNotice" class="text-slate-300 bg-slate-950 px-3.5 py-2 rounded-lg border border-slate-800 flex items-center gap-2 w-full sm:w-auto">
+          <!-- 내 전략 순위 위치 정보가 동적으로 반영됨 -->
+        </div>
+        <button id="btnLoadMoreLeaderboard" onclick="UIController.loadMoreLeaderboard()" class="hidden bg-slate-800 hover:bg-slate-700 active:scale-95 text-amber-400 font-bold px-4 py-2 rounded-lg border border-slate-700 transition w-full sm:w-auto whitespace-nowrap">
+          👇 더보기
+        </button>
       </div>
     </div>
 
@@ -1602,10 +1612,12 @@
     class GlobalLeaderboardService {
       static async fetchLeaderboard() {
         try {
+          // 💡 Top 100위 제한 조회 반영
           const { data, error } = await supabaseClient
             .from('leaderboard')
             .select('*')
-            .order('score', { ascending: false });
+            .order('score', { ascending: false })
+            .limit(100);
 
           if (error) throw error;
 
@@ -1666,6 +1678,10 @@
             .upsert([record], { onConflict: 'id' });
 
           if (error) throw error;
+
+          // 내 등록 전략 ID 기억
+          localStorage.setItem('quant_my_published_id', payload.id);
+          localStorage.setItem('quant_my_published_name', payload.name);
         } catch (e) {
           console.error("[Leaderboard] Supabase 저장 오류:", e);
           ToastNotifier.show("리더보드 동기화 중 오류가 발생했습니다.", "error");
@@ -2239,6 +2255,9 @@
       static currentLeaderboardFilter = 'all';
       static cachedLeaderboard = [];
       
+      // 💡 리더보드 페이지네이션 표시 한도 (기본 50개)
+      static leaderboardDisplayLimit = 50;
+      
       static sortField = 'score';
       static sortOrder = 'desc';
 
@@ -2734,6 +2753,8 @@
 
       static filterLeaderboard(category) {
         this.currentLeaderboardFilter = category;
+        this.leaderboardDisplayLimit = 50; // 💡 카테고리 전환 시 50개로 리셋
+
         const tabs = {
           all: document.getElementById('filterTabAll'),
           long: document.getElementById('filterTabLong'),
@@ -2749,6 +2770,12 @@
           tabs[category].className = "px-2.5 py-1 rounded font-bold bg-amber-500 text-slate-950 whitespace-nowrap";
         }
 
+        this.renderLeaderboard();
+      }
+
+      // 💡 더보기 버튼 클릭 함수
+      static loadMoreLeaderboard() {
+        this.leaderboardDisplayLimit += 50;
         this.renderLeaderboard();
       }
 
@@ -2820,6 +2847,8 @@
 
       static renderLeaderboard() {
         const tbody = document.getElementById('leaderboardTableBody');
+        const loadMoreBtn = document.getElementById('btnLoadMoreLeaderboard');
+        const rankNoticeEl = document.getElementById('myStrategyRankNotice');
         if (!tbody) return;
 
         let list = this.cachedLeaderboard || [];
@@ -2832,7 +2861,46 @@
 
         if (list.length === 0) {
           tbody.innerHTML = `<tr><td colspan="10" class="px-4 py-6 text-center text-slate-500 whitespace-nowrap">등록된 믹스 전략이 없습니다. 첫 번째 주인공이 되어보세요!</td></tr>`;
+          if (loadMoreBtn) loadMoreBtn.classList.add('hidden');
+          if (rankNoticeEl) rankNoticeEl.innerHTML = `<span class="text-slate-400">💡 나만의 커스텀 믹스를 만들어 리더보드에 공유해보세요!</span>`;
           return;
+        }
+
+        // 💡 [내 전략 위치] 실시간 계산 및 하단 안내 반영
+        const myPublishedId = localStorage.getItem('quant_my_published_id');
+        const myPublishedName = localStorage.getItem('quant_my_published_name');
+
+        if (rankNoticeEl) {
+          if (myPublishedId) {
+            const myRankIdx = list.findIndex(item => item.id === myPublishedId);
+            if (myRankIdx !== -1) {
+              const myRank = myRankIdx + 1;
+              const targetItem = list[myRankIdx];
+              rankNoticeEl.innerHTML = `
+                <span class="font-bold text-amber-400 flex items-center gap-1">🎯 내 전략 위치:</span>
+                <span>'<b>${QuantUtils.escapeHTML(targetItem.name)}</b>' (${targetItem.score}점) &rarr; 현재 리그 <b class="text-emerald-400">${myRank}위</b> / ${list.length}개</span>
+              `;
+            } else {
+              rankNoticeEl.innerHTML = `
+                <span class="text-slate-400">💡 내 전략('<b>${QuantUtils.escapeHTML(myPublishedName || '등록된 전략')}</b>')은 현재 리그 Top 100 밖이거나 다른 필터 리그에 있습니다.</span>
+              `;
+            }
+          } else {
+            rankNoticeEl.innerHTML = `<span class="text-slate-400">💡 커스텀 믹스를 만들어 리더보드에 공유해보세요!</span>`;
+          }
+        }
+
+        // 💡 더보기(페이지네이션)를 위한 배열 슬라이싱 (초기 50개 -> 클릭 시 추가 50개)
+        const visibleList = list.slice(0, this.leaderboardDisplayLimit);
+
+        if (loadMoreBtn) {
+          if (list.length > visibleList.length) {
+            loadMoreBtn.classList.remove('hidden');
+            const nextCount = Math.min(visibleList.length + 50, list.length);
+            loadMoreBtn.innerText = `👇 더보기 (${visibleList.length + 1}~${nextCount}위 / 전체 ${list.length}개)`;
+          } else {
+            loadMoreBtn.classList.add('hidden');
+          }
         }
 
         const rebBadgeMap = {
@@ -2844,9 +2912,11 @@
         tbody.innerHTML = '';
         const fragment = document.createDocumentFragment();
 
-        list.forEach((item, idx) => {
+        visibleList.forEach((item, idx) => {
           const tr = document.createElement('tr');
-          tr.className = "hover:bg-slate-800/40 border-b border-slate-800/60";
+          const isMyStrategy = myPublishedId && item.id === myPublishedId;
+          
+          tr.className = `hover:bg-slate-800/40 border-b border-slate-800/60 ${isMyStrategy ? 'bg-amber-950/40 border-amber-500/50' : ''}`;
 
           const rankBadge = idx === 0 ? '🥇 1위' : idx === 1 ? '🥈 2위' : idx === 2 ? '🥉 3위' : `${idx + 1}위`;
           const allocDesc = Object.entries(item.allocations || {})
@@ -2862,6 +2932,7 @@
             <td class="px-3 py-2.5 whitespace-nowrap">
               <div class="flex items-center gap-1.5 flex-wrap">
                 <span class="font-bold text-slate-200">${safeName}</span>
+                ${isMyStrategy ? '<span class="text-[9px] bg-amber-500 text-slate-950 px-1.5 py-0.5 rounded font-bold">내 전략</span>' : ''}
                 ${rebBadge}
               </div>
               <div class="text-[10px] text-slate-500 mt-0.5">by ${safeAuthor} · ${QuantUtils.escapeHTML(item.createdAt)}</div>
@@ -3626,9 +3697,8 @@
             backgroundColor: ['#475569', '#f87171', '#34d399', '#60a5fa']
           }];
 
-          // 💡 몬테카를로 전용 모바일 최적화 툴팁 및 범례 숨김 설정
           plugins = {
-            legend: { display: false }, // X축에 명칭이 명확하므로 상단 범례를 제거하여 공간 확보
+            legend: { display: false },
             tooltip: {
               callbacks: {
                 title: (items) => items[0]?.label || '',

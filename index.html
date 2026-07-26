@@ -71,11 +71,11 @@
       <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <div>
           <label for="startMonth" class="block text-xs font-semibold text-slate-400 mb-1 whitespace-nowrap">시작 월 (YYYY-MM)</label>
-          <input type="month" id="startMonth" value="2000-01" min="1985-01" max="2026-12" onchange="UIController.onDateChange()" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs focus:border-emerald-500 text-slate-100">
+          <input type="month" id="startMonth" value="2000-01" min="1985-01" onchange="UIController.onDateChange()" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs focus:border-emerald-500 text-slate-100">
         </div>
         <div>
           <label for="endMonth" class="block text-xs font-semibold text-slate-400 mb-1 whitespace-nowrap">종료 월 (YYYY-MM)</label>
-          <input type="month" id="endMonth" value="2026-07" min="1985-01" max="2026-12" onchange="UIController.onDateChange()" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs focus:border-emerald-500 text-slate-100">
+          <input type="month" id="endMonth" value="2026-07" min="1985-01" onchange="UIController.onDateChange()" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs focus:border-emerald-500 text-slate-100">
         </div>
         <div>
           <label for="investMode" class="block text-xs font-semibold text-amber-400 mb-1 whitespace-nowrap">투자 전략 방식</label>
@@ -2235,7 +2235,29 @@
       static sortField = 'score';
       static sortOrder = 'desc';
 
+      static getCurrentYearMonth() {
+        const now = new Date();
+        const yyyy = now.getFullYear();
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        return `${yyyy}-${mm}`;
+      }
+
+      static setupDateLimits() {
+        const currentYM = this.getCurrentYearMonth();
+        const startInput = document.getElementById('startMonth');
+        const endInput = document.getElementById('endMonth');
+
+        if (startInput) startInput.max = currentYM;
+        if (endInput) {
+          endInput.max = currentYM;
+          if (!endInput.value || endInput.value > currentYM) {
+            endInput.value = currentYM;
+          }
+        }
+      }
+
       static init() {
+        this.setupDateLimits();
         this.initReactiveMixes();
         this.onInvestModeChange();
         this.updateActiveChips();
@@ -2244,6 +2266,19 @@
       }
 
       static onDateChange() {
+        const currentYM = this.getCurrentYearMonth();
+        const startInput = document.getElementById('startMonth');
+        const endInput = document.getElementById('endMonth');
+
+        if (endInput && endInput.value > currentYM) {
+          ToastNotifier.show(`종료 월은 현재 월(${currentYM})보다 미래일 수 없습니다.`, "warning");
+          endInput.value = currentYM;
+        }
+        if (startInput && startInput.value > currentYM) {
+          ToastNotifier.show(`시작 월은 현재 월(${currentYM})보다 미래일 수 없습니다.`, "warning");
+          startInput.value = currentYM;
+        }
+
         this.renderModalCheckboxes();
         this.renderMixStrategiesUI();
         
@@ -2604,7 +2639,6 @@
           const card = document.createElement('div');
           const tickers = Object.keys(mix.allocations || {});
 
-          // 🚫 믹스 내부 종목 중 하나라도 백필 불가 및 시작월 미지원인지 검증
           const invalidTickersInMix = tickers.filter(t => {
             const cfg = TICKER_UNIVERSE[t];
             const minDate = cfg?.backfillMinDate || cfg?.inceptDate;
@@ -3045,6 +3079,13 @@
         const mode = document.getElementById('investMode').value;
         const fxSpreadRate = parseFloat(document.getElementById('fxSpread').value);
         const taxEnabled = document.getElementById('taxMode').value === 'fifo';
+        const currentYM = this.getCurrentYearMonth();
+
+        if (endMonth > currentYM) {
+          ToastNotifier.show(`종료 월은 현재 월(${currentYM})을 초과할 수 없습니다.`, "error");
+          document.getElementById('endMonth').value = currentYM;
+          return;
+        }
 
         if (!startMonth || !endMonth || startMonth > endMonth) {
           ToastNotifier.show("종료 월은 시작 월과 같거나 이후여야 합니다.", "error");
@@ -3169,7 +3210,6 @@
           }
         });
 
-        // 레버리지 2단계 베이스 지수(^NDX, ^GSPC 등)까지 재귀적으로 끝까지 찾아내어 수신
         let previousSize = 0;
         while (requiredSet.size !== previousSize) {
           previousSize = requiredSet.size;

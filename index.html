@@ -18,6 +18,12 @@
     .sortable-th { cursor: pointer; user-select: none; white-space: nowrap; }
     .sortable-th:hover { background-color: #1e293b; }
     .sticky-col-shadow { box-shadow: 4px 0 8px -2px rgba(0, 0, 0, 0.5); }
+    
+    /* 모바일 한글 단어 단위 자연스러운 줄바꿈 설정 */
+    body, h1, p, div, span {
+      word-break: keep-all;
+      overflow-wrap: break-word;
+    }
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen p-3 sm:p-6 font-mono">
@@ -27,16 +33,17 @@
 
   <div class="max-w-7xl mx-auto space-y-5">
     <!-- 헤더 -->
-    <header class="border-b border-slate-800 pb-4 flex justify-between items-center flex-wrap gap-2">
+    <header class="border-b border-slate-800 pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
       <div>
-        <h1 class="text-xl sm:text-2xl font-bold text-emerald-400 flex items-center gap-2">
-          📈 ETF 적립식 백테스트 계산기 <span class="text-xs font-normal text-emerald-300 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800">v15.0 Pro Engine</span>
+        <h1 class="text-lg sm:text-2xl font-bold text-emerald-400 flex flex-wrap items-center gap-2">
+          <span>📈 ETF 적립식 백테스트 계산기</span>
+          <span class="text-xs font-normal text-emerald-300 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800 shrink-0">v15.0 Pro Engine</span>
         </h1>
         <p class="text-slate-400 text-xs mt-1">
           미국 주요 ETF 적립식·거치식 성과 분석 및 차세대 퀀트 포트폴리오 시뮬레이터
         </p>
       </div>
-      <div id="engineStatus" class="text-xs px-2.5 py-1 rounded bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-2 whitespace-nowrap">
+      <div id="engineStatus" class="text-xs px-2.5 py-1 rounded bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-2 whitespace-nowrap shrink-0">
         <span id="statusDot" class="w-2 h-2 rounded-full bg-slate-500"></span>
         <span id="statusText">대기 중</span>
       </div>
@@ -3526,6 +3533,9 @@
         let labels = [];
         let datasets = [];
         let scales = {};
+        let plugins = {
+          legend: { labels: { color: '#94a3b8', font: { size: 11 } } }
+        };
 
         if (this.activeTab === 'portfolio') {
           const step = Math.max(1, Math.floor(sortedDates.length / 300));
@@ -3568,7 +3578,7 @@
           });
 
           scales = {
-            x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', maxTicksLimit: 12 } },
+            x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', maxTicksLimit: 8 } },
             y: { 
               type: 'logarithmic',
               grid: { color: '#1e293b' }, 
@@ -3595,7 +3605,7 @@
 
           labels = results[firstTicker]?.rollingSharpe?.map(r => r.date) || [];
           scales = {
-            x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', maxTicksLimit: 12 } },
+            x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', maxTicksLimit: 8 } },
             y: { grid: { color: '#1e293b' }, ticks: { color: '#64748b' } }
           };
 
@@ -3609,16 +3619,29 @@
           if (!res || !res.monteCarlo) return;
 
           const mc = res.monteCarlo;
-          labels = ['투입 원금', '하위 5% 최악', '중간 기대치 (평균)', '상위 5% 최선'];
+          labels = ['투입 원금', '하위 5% 최악', '중간 기대치', '상위 5% 최선'];
           
           datasets = [{
-            label: `${targetTicker} 시뮬레이션 예상 평가금 (원)`,
             data: [res.investedKrw, mc.p5, mc.p50, mc.p95],
             backgroundColor: ['#475569', '#f87171', '#34d399', '#60a5fa']
           }];
 
+          // 💡 몬테카를로 전용 모바일 최적화 툴팁 및 범례 숨김 설정
+          plugins = {
+            legend: { display: false }, // X축에 명칭이 명확하므로 상단 범례를 제거하여 공간 확보
+            tooltip: {
+              callbacks: {
+                title: (items) => items[0]?.label || '',
+                label: (context) => ` 예상 평가금: ${QuantUtils.formatKRW(context.raw)}`
+              }
+            }
+          };
+
           scales = {
-            x: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8' } },
+            x: { 
+              grid: { color: '#1e293b' }, 
+              ticks: { color: '#94a3b8', font: { size: 10 }, maxRotation: 0 } 
+            },
             y: { 
               grid: { color: '#1e293b' }, 
               ticks: { color: '#64748b', callback: (val) => QuantUtils.formatKRW(val) } 
@@ -3630,6 +3653,7 @@
           this.chartInstance.data.labels = labels;
           this.chartInstance.data.datasets = datasets;
           this.chartInstance.options.scales = scales;
+          this.chartInstance.options.plugins = plugins;
           this.chartInstance.update('none');
         } else {
           if (this.chartInstance) {
@@ -3645,7 +3669,7 @@
               maintainAspectRatio: false,
               animation: false,
               scales,
-              plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } } }
+              plugins
             }
           });
         }

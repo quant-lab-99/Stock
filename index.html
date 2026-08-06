@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ETF 적립식 백테스트 계산기 v15.0 Pro Refactored</title>
+  <title>ETF 적립식 백테스트 계산기 v15.1 Pro Multi-API Engine</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -19,7 +19,6 @@
     .sortable-th:hover { background-color: #1e293b; }
     .sticky-col-shadow { box-shadow: 4px 0 8px -2px rgba(0, 0, 0, 0.5); }
     
-    /* 모바일 한글 단어 단위 자연스러운 줄바꿈 설정 */
     body, h1, p, div, span {
       word-break: keep-all;
       overflow-wrap: break-word;
@@ -37,10 +36,10 @@
       <div>
         <h1 class="text-lg sm:text-2xl font-bold text-emerald-400 flex flex-wrap items-center gap-2">
           <span>📈 ETF 적립식 백테스트 계산기</span>
-          <span class="text-xs font-normal text-emerald-300 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800 shrink-0">v15.0 Pro Engine</span>
+          <span class="text-xs font-normal text-emerald-300 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800 shrink-0">v15.1 Multi-API Engine</span>
         </h1>
         <p class="text-slate-400 text-xs mt-1">
-          미국 주요 ETF 적립식·거치식 성과 분석 및 차세대 퀀트 포트폴리오 시뮬레이터
+          Polygon.io / Finnhub API 기반 고속 시세 수신 및 GGLL·코스피 지원 퀀트 백테스트 시뮬레이터
         </p>
       </div>
       <div id="engineStatus" class="text-xs px-2.5 py-1 rounded bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-2 whitespace-nowrap shrink-0">
@@ -49,11 +48,39 @@
       </div>
     </header>
 
+    <!-- 시세 API 제공자 설정 패널 -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 sm:p-4 space-y-3">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <span class="text-xs font-bold text-cyan-400 flex items-center gap-1.5">
+          ⚡ 시세 API 제공자 설정 (Polygon.io / Finnhub / Yahoo Fallback)
+        </span>
+        <span class="text-[10px] text-slate-400">API Key 미입력 시 무료 공개 데이터 엔진으로 자동 백업 전환됩니다.</span>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+        <div>
+          <label for="apiProvider" class="block font-semibold text-slate-400 mb-1">기본 API 제공자</label>
+          <select id="apiProvider" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-emerald-300 font-bold">
+            <option value="polygon">Polygon.io API (고속 추천)</option>
+            <option value="finnhub">Finnhub API</option>
+            <option value="yahoo_fallback">Yahoo / Open Proxy Fallback</option>
+          </select>
+        </div>
+        <div>
+          <label for="polygonApiKey" class="block font-semibold text-slate-400 mb-1">Polygon.io API Key</label>
+          <input type="password" id="polygonApiKey" placeholder="Polygon API Key 입력" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200">
+        </div>
+        <div>
+          <label for="finnhubApiKey" class="block font-semibold text-slate-400 mb-1">Finnhub API Key</label>
+          <input type="password" id="finnhubApiKey" placeholder="Finnhub API Token 입력" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200">
+        </div>
+      </div>
+    </div>
+
     <!-- 핵심 가이드 -->
     <div class="bg-slate-900/90 border border-emerald-500/30 rounded-xl p-3 sm:p-4 space-y-2 text-xs">
       <div class="flex justify-between items-center cursor-pointer" onclick="UIController.toggleBeginnerGuide()" role="button" aria-label="핵심 가이드 토글">
         <span class="font-bold text-emerald-400 flex items-center gap-1.5 whitespace-nowrap">
-          💡 차세대 v15.0 Pro 4축 종합점수 및 핵심 지표 가이드
+          💡 차세대 v15.1 Pro 4축 종합점수 및 핵심 지표 가이드
         </span>
         <span id="guideToggleIcon" class="text-slate-400 font-bold whitespace-nowrap">▲ 접기</span>
       </div>
@@ -246,11 +273,8 @@
         </table>
       </div>
 
-      <!-- 리더보드 하단 컨트롤 (더보기 버튼 & 내 전략 순위 안내) -->
       <div id="leaderboardFooter" class="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 text-xs border-t border-slate-800/80">
-        <div id="myStrategyRankNotice" class="text-slate-300 bg-slate-950 px-3.5 py-2 rounded-lg border border-slate-800 flex items-center gap-2 w-full sm:w-auto">
-          <!-- 내 전략 순위 위치 정보가 동적으로 반영됨 -->
-        </div>
+        <div id="myStrategyRankNotice" class="text-slate-300 bg-slate-950 px-3.5 py-2 rounded-lg border border-slate-800 flex items-center gap-2 w-full sm:w-auto"></div>
         <button id="btnLoadMoreLeaderboard" onclick="UIController.loadMoreLeaderboard()" class="hidden bg-slate-800 hover:bg-slate-700 active:scale-95 text-amber-400 font-bold px-4 py-2 rounded-lg border border-slate-700 transition w-full sm:w-auto whitespace-nowrap">
           👇 더보기
         </button>
@@ -261,7 +285,7 @@
     <div class="bg-slate-900 p-4 rounded-xl border border-slate-800 space-y-3">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <span class="text-xs font-semibold text-slate-300 whitespace-nowrap">
-          개별 비교 분석 대상 자산 (선택: <span id="selectedCount" class="text-emerald-400 font-bold">0</span>/20)
+          개별 비교 분석 대상 자산 (선택: <span id="selectedCount" class="text-emerald-400 font-bold">0</span>/22)
         </span>
         <button onclick="UIController.toggleModal()" aria-label="단일 자산 선택 및 변경 모달 열기" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-1.5 rounded-lg border border-slate-700 transition flex items-center justify-center gap-1 w-full sm:w-auto whitespace-nowrap">
           ⚙️ 자산 선택 및 변경
@@ -285,7 +309,7 @@
     <div id="assetModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3">
       <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
         <div class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900">
-          <h3 class="font-bold text-sm text-emerald-400 whitespace-nowrap">주요 미국 ETF 목록 (20종)</h3>
+          <h3 class="font-bold text-sm text-emerald-400 whitespace-nowrap">주요 미국 ETF 및 KOSPI 자산 목록 (22종)</h3>
           <button onclick="UIController.toggleModal()" aria-label="모달 닫기" class="text-slate-400 hover:text-slate-100 text-lg font-bold px-2">&times;</button>
         </div>
         <div class="p-4 overflow-y-auto space-y-4 text-xs">
@@ -461,6 +485,7 @@
       CORS_WORKER_PROXY: "https://my-yahoo-proxy.rlfhdzk.workers.dev/?url="
     };
 
+    // SPMO 공식 월별 알파 전체 데이터셋 (누락 없이 완전 유지)
     const SPMO_OFFICIAL_MONTHLY_ALPHA = {
       '1995-01': 0.008, '1995-02': 0.005, '1995-03': 0.012, '1995-04': 0.003, '1995-05': 0.015, '1995-06': 0.002,
       '1995-07': 0.010, '1995-08': 0.004, '1995-09': 0.018, '1995-10': -0.005, '1995-11': 0.006, '1995-12': 0.011,
@@ -599,31 +624,34 @@
       }
     }
 
+    // GGLL 및 KOSPI가 확장 포함된 자산 유니버스
     const TICKER_UNIVERSE = {
-      'QQQ':  { name: 'Invesco QQQ Trust', base: '^NDX', leverage: 1, fee: 0.0020, inceptDate: '1999-03', allowBackfill: true, backfillMinDate: '1985-10', proxyType: 'index_tracking' },
-      'QLD':  { name: 'ProShares Ultra QQQ (2x)', base: 'QQQ', leverage: 2, fee: 0.0095, inceptDate: '2006-06', allowBackfill: true, backfillMinDate: '1985-10', trackingError: 0.002, swapSpread: 0.0045, proxyType: 'leveraged' },
-      'TQQQ': { name: 'ProShares UltraPro QQQ (3x)', base: 'QQQ', leverage: 3, fee: 0.0098, inceptDate: '2010-02', allowBackfill: true, backfillMinDate: '1985-10', trackingError: 0.0035, swapSpread: 0.0055, proxyType: 'leveraged' },
-      'SQQQ': { name: 'ProShares Short QQQ (-3x)', base: 'QQQ', leverage: -3, fee: 0.0095, inceptDate: '2010-02', allowBackfill: true, backfillMinDate: '1985-10', trackingError: 0.004, swapSpread: 0.0060, proxyType: 'leveraged' },
-      'SPY':  { name: 'SPDR S&P 500 ETF Trust', base: '^GSPC', leverage: 1, fee: 0.0009, inceptDate: '1993-01', allowBackfill: true, backfillMinDate: '1985-01', proxyType: 'index_tracking' },
-      'SSO':  { name: 'ProShares Ultra S&P500 (2x)', base: 'SPY', leverage: 2, fee: 0.0091, inceptDate: '2006-06', allowBackfill: true, backfillMinDate: '1985-01', trackingError: 0.0015, swapSpread: 0.0040, proxyType: 'leveraged' },
-      'UPRO': { name: 'ProShares UltraPro S&P500 (3x)', base: 'SPY', leverage: 3, fee: 0.0091, inceptDate: '2009-06', allowBackfill: true, backfillMinDate: '1985-01', trackingError: 0.003, swapSpread: 0.0050, proxyType: 'leveraged' },
-      'SMH':  { name: 'VanEck Semiconductor ETF', base: '^SOX', leverage: 1, fee: 0.0035, inceptDate: '2011-12', allowBackfill: true, backfillMinDate: '1993-12', proxyType: 'index_tracking' },
-      'SOXL': { name: 'Direxion Semi Bull 3X', base: 'SMH', leverage: 3, fee: 0.0094, inceptDate: '2010-03', allowBackfill: true, backfillMinDate: '1993-12', trackingError: 0.004, swapSpread: 0.0060, proxyType: 'leveraged' },
-      'SCHD': { name: 'Schwab U.S. Dividend Equity', base: null, leverage: 1, fee: 0.0006, inceptDate: '2011-10', allowBackfill: false, backfillMinDate: '2011-10', warningReason: '2011년 이전 백필 불가', proxyType: 'unsupported' },
-      'SPMO': { name: 'Invesco S&P 500 Momentum', base: 'SPY', leverage: 1, fee: 0.0013, inceptDate: '2017-10', allowBackfill: true, backfillMinDate: '1994-12', proxyType: 'official_embedded_index' },
-      'JEPI': { name: 'JPMorgan Equity Premium', base: null, leverage: 1, fee: 0.0035, inceptDate: '2020-05', allowBackfill: false, backfillMinDate: '2020-05', warningReason: '2020년 이전 백필 불가', proxyType: 'unsupported' },
-      'TLT':  { name: 'iShares 20+ Year Treasury', base: '^TYX', leverage: 1, fee: 0.0015, inceptDate: '2002-07', allowBackfill: true, backfillMinDate: '1985-01', proxyType: 'index_tracking' },
-      'TMF':  { name: 'Direxion 20+ Yr Bull 3x', base: 'TLT', leverage: 3, fee: 0.0101, inceptDate: '2009-04', allowBackfill: true, backfillMinDate: '1985-01', trackingError: 0.003, swapSpread: 0.0050, proxyType: 'leveraged' },
-      'GLD':  { name: 'SPDR Gold Shares', base: 'GC=F', leverage: 1, fee: 0.0040, inceptDate: '2004-11', allowBackfill: true, backfillMinDate: '1985-01', proxyType: 'index_tracking' },
-      'ARKK': { name: 'ARK Innovation ETF', base: null, leverage: 1, fee: 0.0075, inceptDate: '2014-10', allowBackfill: false, backfillMinDate: '2014-10', warningReason: '2014년 이전 백필 불가', proxyType: 'unsupported' },
-      'IWM':  { name: 'iShares Russell 2000 ETF', base: '^RUT', leverage: 1, fee: 0.0019, inceptDate: '2000-05', allowBackfill: true, backfillMinDate: '1987-01', proxyType: 'index_tracking' },
-      'XLK':  { name: 'Technology Select SPDR', base: null, leverage: 1, fee: 0.0010, inceptDate: '1998-12', allowBackfill: false, backfillMinDate: '1998-12', warningReason: '1998년 이전 백필 불가', proxyType: 'direct' },
-      'XLE':  { name: 'Energy Select SPDR', base: null, leverage: 1, fee: 0.0010, inceptDate: '1998-12', allowBackfill: false, backfillMinDate: '1998-12', warningReason: '1998년 이전 백필 불가', proxyType: 'direct' },
-      'XBI':  { name: 'SPDR S&P Biotech ETF', base: '^SPSIBI', leverage: 1, fee: 0.0035, inceptDate: '2006-01', allowBackfill: true, backfillMinDate: '1990-01', proxyType: 'index_tracking' }
+      'QQQ':   { name: 'Invesco QQQ Trust', base: '^NDX', leverage: 1, fee: 0.0020, inceptDate: '1999-03', allowBackfill: true, backfillMinDate: '1985-10', proxyType: 'index_tracking' },
+      'QLD':   { name: 'ProShares Ultra QQQ (2x)', base: 'QQQ', leverage: 2, fee: 0.0095, inceptDate: '2006-06', allowBackfill: true, backfillMinDate: '1985-10', trackingError: 0.002, swapSpread: 0.0045, proxyType: 'leveraged' },
+      'TQQQ':  { name: 'ProShares UltraPro QQQ (3x)', base: 'QQQ', leverage: 3, fee: 0.0098, inceptDate: '2010-02', allowBackfill: true, backfillMinDate: '1985-10', trackingError: 0.0035, swapSpread: 0.0055, proxyType: 'leveraged' },
+      'SQQQ':  { name: 'ProShares Short QQQ (-3x)', base: 'QQQ', leverage: -3, fee: 0.0095, inceptDate: '2010-02', allowBackfill: true, backfillMinDate: '1985-10', trackingError: 0.004, swapSpread: 0.0060, proxyType: 'leveraged' },
+      'GGLL':  { name: 'GraniteShares 2x Long GOOGL Daily ETF', base: 'GOOGL', leverage: 2, fee: 0.0099, inceptDate: '2022-12', allowBackfill: true, backfillMinDate: '2004-08', trackingError: 0.0025, swapSpread: 0.0045, proxyType: 'leveraged' },
+      'GOOGL': { name: 'Alphabet Inc. Class A', base: null, leverage: 1, fee: 0.0000, inceptDate: '2004-08', allowBackfill: false, backfillMinDate: '2004-08', proxyType: 'direct' },
+      'KOSPI': { name: 'KOSPI Composite Index (코스피 지수)', base: '^KS11', leverage: 1, fee: 0.0005, inceptDate: '1980-01', allowBackfill: true, backfillMinDate: '1985-01', proxyType: 'index_tracking' },
+      'SPY':   { name: 'SPDR S&P 500 ETF Trust', base: '^GSPC', leverage: 1, fee: 0.0009, inceptDate: '1993-01', allowBackfill: true, backfillMinDate: '1985-01', proxyType: 'index_tracking' },
+      'SSO':   { name: 'ProShares Ultra S&P500 (2x)', base: 'SPY', leverage: 2, fee: 0.0091, inceptDate: '2006-06', allowBackfill: true, backfillMinDate: '1985-01', trackingError: 0.0015, swapSpread: 0.0040, proxyType: 'leveraged' },
+      'UPRO':  { name: 'ProShares UltraPro S&P500 (3x)', base: 'SPY', leverage: 3, fee: 0.0091, inceptDate: '2009-06', allowBackfill: true, backfillMinDate: '1985-01', trackingError: 0.003, swapSpread: 0.0050, proxyType: 'leveraged' },
+      'SMH':   { name: 'VanEck Semiconductor ETF', base: '^SOX', leverage: 1, fee: 0.0035, inceptDate: '2011-12', allowBackfill: true, backfillMinDate: '1993-12', proxyType: 'index_tracking' },
+      'SOXL':  { name: 'Direxion Semi Bull 3X', base: 'SMH', leverage: 3, fee: 0.0094, inceptDate: '2010-03', allowBackfill: true, backfillMinDate: '1993-12', trackingError: 0.004, swapSpread: 0.0060, proxyType: 'leveraged' },
+      'SCHD':  { name: 'Schwab U.S. Dividend Equity', base: null, leverage: 1, fee: 0.0006, inceptDate: '2011-10', allowBackfill: false, backfillMinDate: '2011-10', warningReason: '2011년 이전 백필 불가', proxyType: 'unsupported' },
+      'SPMO':  { name: 'Invesco S&P 500 Momentum', base: 'SPY', leverage: 1, fee: 0.0013, inceptDate: '2017-10', allowBackfill: true, backfillMinDate: '1994-12', proxyType: 'official_embedded_index' },
+      'JEPI':  { name: 'JPMorgan Equity Premium', base: null, leverage: 1, fee: 0.0035, inceptDate: '2020-05', allowBackfill: false, backfillMinDate: '2020-05', warningReason: '2020년 이전 백필 불가', proxyType: 'unsupported' },
+      'TLT':   { name: 'iShares 20+ Year Treasury', base: '^TYX', leverage: 1, fee: 0.0015, inceptDate: '2002-07', allowBackfill: true, backfillMinDate: '1985-01', proxyType: 'index_tracking' },
+      'TMF':   { name: 'Direxion 20+ Yr Bull 3x', base: 'TLT', leverage: 3, fee: 0.0101, inceptDate: '2009-04', allowBackfill: true, backfillMinDate: '1985-01', trackingError: 0.003, swapSpread: 0.0050, proxyType: 'leveraged' },
+      'GLD':   { name: 'SPDR Gold Shares', base: 'GC=F', leverage: 1, fee: 0.0040, inceptDate: '2004-11', allowBackfill: true, backfillMinDate: '1985-01', proxyType: 'index_tracking' },
+      'ARKK':  { name: 'ARK Innovation ETF', base: null, leverage: 1, fee: 0.0075, inceptDate: '2014-10', allowBackfill: false, backfillMinDate: '2014-10', warningReason: '2014년 이전 백필 불가', proxyType: 'unsupported' },
+      'IWM':   { name: 'iShares Russell 2000 ETF', base: '^RUT', leverage: 1, fee: 0.0019, inceptDate: '2000-05', allowBackfill: true, backfillMinDate: '1987-01', proxyType: 'index_tracking' },
+      'XLK':   { name: 'Technology Select SPDR', base: null, leverage: 1, fee: 0.0010, inceptDate: '1998-12', allowBackfill: false, backfillMinDate: '1998-12', warningReason: '1998년 이전 백필 불가', proxyType: 'direct' },
+      'XLE':   { name: 'Energy Select SPDR', base: null, leverage: 1, fee: 0.0010, inceptDate: '1998-12', allowBackfill: false, backfillMinDate: '1998-12', warningReason: '1998년 이전 백필 불가', proxyType: 'direct' }
     };
 
     class QuantDataCache {
-      static dbName = "QuantBacktestCacheDB_v15_0";
+      static dbName = "QuantBacktestCacheDB_v15_1";
       static storeName = "timeSeriesStore";
       static TTL_MS = 24 * 60 * 60 * 1000;
       static dbPromise = null;
@@ -674,6 +702,158 @@
           value.timestamp = Date.now();
           tx.objectStore(this.storeName).put(value, key);
         } catch (e) { console.warn("[Cache] Write error:", e); }
+      }
+    }
+
+    /* Polygon.io / Finnhub / CORS 다중 백업 페처 */
+    class MarketDataFetcher {
+      static async fetchChartData(ticker, startYear, endYear) {
+        const cacheKey = `${ticker}_${startYear}_${endYear}_v15_1`;
+        const cached = await QuantDataCache.get(cacheKey);
+        if (cached) {
+          return {
+            priceMap: new Map(cached.priceMapEntries),
+            divMap: new Map(cached.divMapEntries)
+          };
+        }
+
+        const provider = document.getElementById('apiProvider')?.value || 'polygon';
+        const polygonKey = document.getElementById('polygonApiKey')?.value?.trim();
+        const finnhubKey = document.getElementById('finnhubApiKey')?.value?.trim();
+
+        let resultData = null;
+
+        if (provider === 'polygon' && polygonKey) {
+          resultData = await this.fetchPolygonData(ticker, startYear, endYear, polygonKey);
+        } else if (provider === 'finnhub' && finnhubKey) {
+          resultData = await this.fetchFinnhubData(ticker, startYear, endYear, finnhubKey);
+        }
+
+        if (!resultData) {
+          resultData = await YahooFinanceFetcher.fetchChartData(ticker, startYear, endYear);
+        }
+
+        if (resultData && resultData.priceMap && resultData.priceMap.size > 0) {
+          await QuantDataCache.set(cacheKey, {
+            priceMapEntries: Array.from(resultData.priceMap.entries()),
+            divMapEntries: Array.from(resultData.divMap.entries())
+          });
+        }
+
+        return resultData;
+      }
+
+      static async fetchPolygonData(ticker, startYear, endYear, apiKey) {
+        try {
+          const sym = ticker === 'KOSPI' ? 'I:KS11' : ticker.replace('^', 'I:');
+          const from = `${startYear}-01-01`;
+          const to = `${endYear}-12-31`;
+          const url = `https://api.polygon.io/v2/aggs/ticker/${encodeURIComponent(sym)}/range/1/day/${from}/${to}?adjusted=true&sort=asc&limit=50000&apiKey=${apiKey}`;
+
+          const res = await QuantUtils.fetchWithTimeout(url, { timeout: 10000 });
+          if (!res.ok) return null;
+          const json = await res.json();
+          if (!json.results || json.results.length === 0) return null;
+
+          const priceMap = new Map();
+          const divMap = new Map();
+
+          json.results.forEach(item => {
+            const dateStr = new Date(item.t).toISOString().split('T')[0];
+            if (item.c > 0) priceMap.set(dateStr, item.c);
+          });
+
+          return { priceMap, divMap };
+        } catch (e) {
+          console.warn(`[PolygonFetcher] ${ticker} 수신 실패, Fallback 전환:`, e);
+          return null;
+        }
+      }
+
+      static async fetchFinnhubData(ticker, startYear, endYear, apiKey) {
+        try {
+          const sym = ticker === 'KOSPI' ? '^KS11' : ticker;
+          const startSec = Math.floor(new Date(`${startYear}-01-01T00:00:00Z`).getTime() / 1000);
+          const endSec = Math.floor(new Date(`${endYear}-12-31T23:59:59Z`).getTime() / 1000);
+          const url = `https://finnhub.io/api/v1/stock/candle?symbol=${encodeURIComponent(sym)}&resolution=D&from=${startSec}&to=${endSec}&token=${apiKey}`;
+
+          const res = await QuantUtils.fetchWithTimeout(url, { timeout: 10000 });
+          if (!res.ok) return null;
+          const json = await res.json();
+          if (json.s !== "ok" || !json.c) return null;
+
+          const priceMap = new Map();
+          const divMap = new Map();
+
+          json.t.forEach((ts, idx) => {
+            const price = json.c[idx];
+            if (price > 0) {
+              const dateStr = new Date(ts * 1000).toISOString().split('T')[0];
+              priceMap.set(dateStr, price);
+            }
+          });
+
+          return { priceMap, divMap };
+        } catch (e) {
+          console.warn(`[FinnhubFetcher] ${ticker} 수신 실패, Fallback 전환:`, e);
+          return null;
+        }
+      }
+    }
+
+    class YahooFinanceFetcher {
+      static async fetchChartData(ticker, startYear, endYear) {
+        const sym = ticker === 'KOSPI' ? '^KS11' : ticker;
+        const startSec = Math.floor(new Date(`${startYear}-01-01T00:00:00Z`).getTime() / 1000);
+        const endSec = Math.floor(new Date(`${endYear}-12-31T23:59:59Z`).getTime() / 1000);
+        
+        const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?period1=${startSec}&period2=${endSec}&interval=1d&events=div`;
+        
+        const baseProxies = [
+          `${GLOBAL_QUANT_CONFIG.CORS_WORKER_PROXY}${encodeURIComponent(yahooUrl)}`,
+          `https://corsproxy.io/?${encodeURIComponent(yahooUrl)}`,
+          `https://api.allorigins.win/raw?url=${encodeURIComponent(yahooUrl)}`
+        ];
+
+        const proxies = QuantUtils.shuffleArray(baseProxies);
+
+        for (const proxyUrl of proxies) {
+          try {
+            const res = await QuantUtils.fetchWithTimeout(proxyUrl, { timeout: 10000 });
+            if (!res.ok) continue;
+            const json = await res.json();
+            
+            const result = json.chart?.result?.[0];
+            if (!result) continue;
+
+            const timestamps = result.timestamp || result.timestamps || [];
+            const closes = result.indicators?.quote?.[0]?.close || [];
+            const eventsDiv = result.events?.dividends || {};
+
+            const priceMap = new Map();
+            const divMap = new Map();
+
+            timestamps.forEach((ts, idx) => {
+              const price = closes[idx];
+              if (price !== null && price !== undefined && !isNaN(price)) {
+                const dateStr = new Date(ts * 1000).toISOString().split('T')[0];
+                priceMap.set(dateStr, price);
+              }
+            });
+
+            Object.values(eventsDiv).forEach(div => {
+              if (div.amount && div.date) {
+                const dateStr = new Date(div.date * 1000).toISOString().split('T')[0];
+                divMap.set(dateStr, div.amount);
+              }
+            });
+
+            if (priceMap.size > 0) return { priceMap, divMap };
+          } catch (err) {
+            console.warn(`[YahooFetcher] ${ticker} 프록시 연결 시도 중...`);
+          }
+        }
+        return null;
       }
     }
 
@@ -1035,77 +1215,6 @@
 
       getTotalCostBasisKrw() {
         return QuantUtils.cleanFloat(this.lots.reduce((acc, l) => acc + l.costBasisKrw, 0));
-      }
-    }
-
-    class YahooFinanceFetcher {
-      static async fetchChartData(ticker, startYear, endYear) {
-        const cacheKey = `${ticker}_${startYear}_${endYear}_v15_0`;
-        const cached = await QuantDataCache.get(cacheKey);
-        if (cached) {
-          return {
-            priceMap: new Map(cached.priceMapEntries),
-            divMap: new Map(cached.divMapEntries)
-          };
-        }
-
-        const startSec = Math.floor(new Date(`${startYear}-01-01T00:00:00Z`).getTime() / 1000);
-        const endSec = Math.floor(new Date(`${endYear}-12-31T23:59:59Z`).getTime() / 1000);
-        
-        const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?period1=${startSec}&period2=${endSec}&interval=1d&events=div`;
-        
-        const baseProxies = [
-          `${GLOBAL_QUANT_CONFIG.CORS_WORKER_PROXY}${encodeURIComponent(yahooUrl)}`,
-          `https://corsproxy.io/?${encodeURIComponent(yahooUrl)}`,
-          `https://api.allorigins.win/raw?url=${encodeURIComponent(yahooUrl)}`
-        ];
-
-        const proxies = QuantUtils.shuffleArray(baseProxies);
-
-        for (const proxyUrl of proxies) {
-          try {
-            const res = await QuantUtils.fetchWithTimeout(proxyUrl, { timeout: 10000 });
-            if (!res.ok) continue;
-            const json = await res.json();
-            
-            const result = json.chart?.result?.[0];
-            if (!result) continue;
-
-            const timestamps = result.timestamp || result.timestamps || [];
-            const closes = result.indicators?.quote?.[0]?.close || [];
-            const eventsDiv = result.events?.dividends || {};
-
-            const priceMap = new Map();
-            const divMap = new Map();
-
-            timestamps.forEach((ts, idx) => {
-              const price = closes[idx];
-              if (price !== null && price !== undefined && !isNaN(price)) {
-                const dateStr = new Date(ts * 1000).toISOString().split('T')[0];
-                priceMap.set(dateStr, price);
-              }
-            });
-
-            Object.values(eventsDiv).forEach(div => {
-              if (div.amount && div.date) {
-                const dateStr = new Date(div.date * 1000).toISOString().split('T')[0];
-                divMap.set(dateStr, div.amount);
-              }
-            });
-
-            if (priceMap.size > 0) {
-              await QuantDataCache.set(cacheKey, {
-                priceMapEntries: Array.from(priceMap.entries()),
-                divMapEntries: Array.from(divMap.entries())
-              });
-              return { priceMap, divMap };
-            }
-          } catch (err) {
-            console.warn(`[YahooFetcher] ${ticker} 프록시 연결 시도 중...`);
-          }
-        }
-
-        return null;
       }
     }
 
@@ -1612,7 +1721,6 @@
     class GlobalLeaderboardService {
       static async fetchLeaderboard() {
         try {
-          // 💡 Top 100위 제한 조회 반영
           const { data, error } = await supabaseClient
             .from('leaderboard')
             .select('*')
@@ -1679,7 +1787,6 @@
 
           if (error) throw error;
 
-          // 내 등록 전략 ID 기억
           localStorage.setItem('quant_my_published_id', payload.id);
           localStorage.setItem('quant_my_published_name', payload.name);
         } catch (e) {
@@ -1818,7 +1925,7 @@
 
         const tasksForMonteCarlo = [];
 
-        // 개별 자산 루프
+        // 개별 자산 연산
         for (let tIdx = 0; tIdx < tickers.length; tIdx++) {
           await new Promise(resolve => setTimeout(resolve, 0));
 
@@ -1828,6 +1935,9 @@
           const prices = processedPrices[ticker];
           const divMap = processedDivs[ticker];
           if (!prices) continue;
+
+          // 코스피 지수는 원화 자산이므로 FX Rate를 1.0 고정
+          const isKOSPI = (ticker === 'KOSPI');
 
           const taxLotMgr = new FIFOTaxLotManager();
           let cashKrw = 0.0;
@@ -1847,11 +1957,11 @@
 
           for (let i = 0; i < N; i++) {
             const dateStr = sortedDates[i];
-            const fx = fxPrices[i];
+            const fx = isKOSPI ? 1.0 : fxPrices[i];
             const priceUsd = prices[i];
             if (priceUsd > peakPriceUsd) peakPriceUsd = priceUsd;
 
-            this.processDividends(divPayQueue, i, priceUsd, fx, taxLotMgr, divMap, dateStr, fxSpreadRate);
+            this.processDividends(divPayQueue, i, priceUsd, fx, taxLotMgr, divMap, dateStr, isKOSPI ? 0 : fxSpreadRate);
 
             const preCfValKrw = (taxLotMgr.getTotalShares() * priceUsd * fx) + cashKrw;
             if (i > 0) {
@@ -1871,7 +1981,7 @@
 
               if (depositKrw > 0) {
                 if (priceUsd > 0) {
-                  const buyFx = fx * (1 + fxSpreadRate);
+                  const buyFx = fx * (1 + (isKOSPI ? 0 : fxSpreadRate));
                   const boughtShares = (depositKrw + cashKrw) / (priceUsd * buyFx);
 
                   taxLotMgr.buy(boughtShares, priceUsd, buyFx);
@@ -1884,7 +1994,7 @@
 
             let currentValKrw = (taxLotMgr.getTotalShares() * priceUsd * fx) + cashKrw;
 
-            if (taxEnabled && isYearEnd[i] && i < N - 1) {
+            if (taxEnabled && !isKOSPI && isYearEnd[i] && i < N - 1) {
               const taxRes = this.processTaxHarvesting(taxLotMgr, currentValKrw, priceUsd, fx, fxSpreadRate, yearRealizedGainKrw, TAX_LIMIT, cashKrw);
               yearRealizedGainKrw = taxRes.updatedGain;
               cashKrw = taxRes.updatedCash;
@@ -1897,7 +2007,7 @@
 
           let finalVal = portfolioValues[N - 1];
 
-          if (taxEnabled && taxLotMgr.getTotalShares() > 0) {
+          if (taxEnabled && !isKOSPI && taxLotMgr.getTotalShares() > 0) {
             const finalCostBasis = taxLotMgr.getTotalCostBasisKrw();
             const finalUnrealizedGain = Math.max(0, finalVal - finalCostBasis);
             const totalFinalYearGain = finalUnrealizedGain + yearRealizedGainKrw;
@@ -2006,17 +2116,19 @@
 
           for (let i = 0; i < N; i++) {
             const dateStr = sortedDates[i];
-            const fx = fxPrices[i];
 
             mixTickers.forEach(t => {
+              const isKOSPI = (t === 'KOSPI');
+              const fx = isKOSPI ? 1.0 : fxPrices[i];
               const divMap = processedDivs[t];
+
               if (divMap && divMap.has(dateStr) && mixShares[t] > 0) {
                 const divPerShare = divMap.get(dateStr);
                 const grossDivUsd = mixShares[t] * divPerShare;
                 const netDivUsd = grossDivUsd * (1 - GLOBAL_QUANT_CONFIG.US_DIV_TAX_RATE);
                 const pUsd = processedPrices[t] ? processedPrices[t][i] : 0.0;
                 if (pUsd > 0) {
-                  const buyFx = fx * (1 + fxSpreadRate);
+                  const buyFx = fx * (1 + (isKOSPI ? 0 : fxSpreadRate));
                   mixShares[t] += netDivUsd / pUsd;
                 }
               }
@@ -2024,6 +2136,8 @@
 
             let todayTotalValBeforeDeposit = 0;
             mixTickers.forEach(t => {
+              const isKOSPI = (t === 'KOSPI');
+              const fx = isKOSPI ? 1.0 : fxPrices[i];
               const pUsd = processedPrices[t] ? processedPrices[t][i] : 0.0;
               todayTotalValBeforeDeposit += mixShares[t] * pUsd * fx;
             });
@@ -2067,10 +2181,13 @@
                 mixTickers.forEach(t => {
                   const targetKrw = totalPortfolioKrw * normWeights[t];
                   const pUsd = processedPrices[t] ? processedPrices[t][i] : 0.0;
+                  const isKOSPI = (t === 'KOSPI');
+                  const fx = isKOSPI ? 1.0 : fxPrices[i];
+
                   if (pUsd > 0) {
                     const currentVal = mixShares[t] * pUsd * fx;
                     const diffKrw = targetKrw - currentVal;
-                    rebalanceFrictionCostKrw += Math.abs(diffKrw) * fxSpreadRate;
+                    rebalanceFrictionCostKrw += Math.abs(diffKrw) * (isKOSPI ? 0 : fxSpreadRate);
                     mixShares[t] = targetKrw / (pUsd * fx);
                   }
                 });
@@ -2078,7 +2195,9 @@
               } else if (depositKrw > 0) {
                 mixTickers.forEach(t => {
                   const allocKrw = depositKrw * normWeights[t];
-                  const buyFx = fx * (1 + fxSpreadRate);
+                  const isKOSPI = (t === 'KOSPI');
+                  const fx = isKOSPI ? 1.0 : fxPrices[i];
+                  const buyFx = fx * (1 + (isKOSPI ? 0 : fxSpreadRate));
                   const pUsd = processedPrices[t] ? processedPrices[t][i] : 0.0;
                   if (pUsd > 0 && buyFx > 0) {
                     mixShares[t] += allocKrw / (pUsd * buyFx);
@@ -2091,10 +2210,13 @@
               mixTickers.forEach(t => {
                 const targetKrw = totalPortfolioKrw * normWeights[t];
                 const pUsd = processedPrices[t] ? processedPrices[t][i] : 0.0;
+                const isKOSPI = (t === 'KOSPI');
+                const fx = isKOSPI ? 1.0 : fxPrices[i];
+
                 if (pUsd > 0) {
                   const currentVal = mixShares[t] * pUsd * fx;
                   const diffKrw = targetKrw - currentVal;
-                  rebalanceFrictionCostKrw += Math.abs(diffKrw) * fxSpreadRate;
+                  rebalanceFrictionCostKrw += Math.abs(diffKrw) * (isKOSPI ? 0 : fxSpreadRate);
                   mixShares[t] = targetKrw / (pUsd * fx);
                 }
               });
@@ -2103,6 +2225,8 @@
 
             let todayTotalVal = 0;
             mixTickers.forEach(t => {
+              const isKOSPI = (t === 'KOSPI');
+              const fx = isKOSPI ? 1.0 : fxPrices[i];
               const pUsd = processedPrices[t] ? processedPrices[t][i] : 0.0;
               todayTotalVal += mixShares[t] * pUsd * fx;
             });
@@ -2244,7 +2368,7 @@
     }
 
     class UIController {
-      static selectedTickers = ['QQQ', 'QLD'];
+      static selectedTickers = ['QQQ', 'GGLL', 'KOSPI'];
       static customMixesStore = null;
       static chartInstance = null;
       static activeTab = 'portfolio';
@@ -2254,8 +2378,6 @@
       static isGuideOpen = true;
       static currentLeaderboardFilter = 'all';
       static cachedLeaderboard = [];
-      
-      // 💡 리더보드 페이지네이션 표시 한도 (기본 50개)
       static leaderboardDisplayLimit = 50;
       
       static sortField = 'score';
@@ -2332,8 +2454,8 @@
             initialMixes = JSON.parse(stored);
           } else {
             initialMixes = [
-              { id: 'mix_1', name: '기술주 2배 혼합 믹스', enabled: true, rebalanceFreq: 'monthly', allocations: { 'QQQ': 70, 'QLD': 30 } },
-              { id: 'mix_2', name: '올웨더 자산배분 믹스', enabled: true, rebalanceFreq: 'yearly', allocations: { 'SPY': 40, 'TLT': 30, 'GLD': 20, 'IWM': 10 } }
+              { id: 'mix_1', name: '기술주 2배 혼합 믹스 (GOOGL 2배 포함)', enabled: true, rebalanceFreq: 'monthly', allocations: { 'QQQ': 50, 'GGLL': 50 } },
+              { id: 'mix_2', name: '한·미 글로벌 자산배분 믹스', enabled: true, rebalanceFreq: 'yearly', allocations: { 'SPY': 50, 'KOSPI': 30, 'GLD': 20 } }
             ];
           }
         } catch {
@@ -2558,7 +2680,7 @@
           name: `나만의 믹스 ${this.customMixes.length + 1}`,
           enabled: true,
           rebalanceFreq: 'monthly',
-          allocations: { 'QQQ': 50, 'QLD': 50 }
+          allocations: { 'QQQ': 50, 'GGLL': 50 }
         });
       }
 
@@ -2753,7 +2875,7 @@
 
       static filterLeaderboard(category) {
         this.currentLeaderboardFilter = category;
-        this.leaderboardDisplayLimit = 50; // 💡 카테고리 전환 시 50개로 리셋
+        this.leaderboardDisplayLimit = 50;
 
         const tabs = {
           all: document.getElementById('filterTabAll'),
@@ -2773,7 +2895,6 @@
         this.renderLeaderboard();
       }
 
-      // 💡 더보기 버튼 클릭 함수
       static loadMoreLeaderboard() {
         this.leaderboardDisplayLimit += 50;
         this.renderLeaderboard();
@@ -2866,7 +2987,6 @@
           return;
         }
 
-        // 💡 [내 전략 위치] 실시간 계산 및 하단 안내 반영
         const myPublishedId = localStorage.getItem('quant_my_published_id');
         const myPublishedName = localStorage.getItem('quant_my_published_name');
 
@@ -2890,7 +3010,6 @@
           }
         }
 
-        // 💡 더보기(페이지네이션)를 위한 배열 슬라이싱 (초기 50개 -> 클릭 시 추가 50개)
         const visibleList = list.slice(0, this.leaderboardDisplayLimit);
 
         if (loadMoreBtn) {
@@ -3090,7 +3209,7 @@
       }
 
       static resetDefaults() {
-        this.selectedTickers = ['QQQ', 'QLD'];
+        this.selectedTickers = ['QQQ', 'GGLL', 'KOSPI'];
         this.updateActiveChips();
         this.renderModalCheckboxes();
       }
@@ -3171,7 +3290,6 @@
           return;
         }
 
-        // 믹스 활성화 체크 + 시작월 백필 불가 종목 포함 믹스 자동 연산 제외
         const activeMixes = this.customMixes.filter(mix => {
           if (!mix.enabled) return false;
           
@@ -3191,7 +3309,6 @@
           return;
         }
 
-        // 개별 선택 자산 백필 불가 검증
         const invalidAssets = [];
         this.selectedTickers.forEach(ticker => {
           const config = TICKER_UNIVERSE[ticker];
@@ -3281,6 +3398,8 @@
         requiredSet.add('SCHD');
         requiredSet.add('SPMO');
         requiredSet.add('XLK');
+        requiredSet.add('GOOGL');
+        requiredSet.add('KOSPI');
 
         activeMixes.forEach(mix => {
           if (mix.allocations) {
@@ -3299,8 +3418,8 @@
 
         const fullTickers = Array.from(requiredSet);
 
-        const fetchPromises = fullTickers.map(t => YahooFinanceFetcher.fetchChartData(t, startYear, endYear));
-        const fxPromise = YahooFinanceFetcher.fetchChartData('KRW=X', startYear, endYear);
+        const fetchPromises = fullTickers.map(t => MarketDataFetcher.fetchChartData(t, startYear, endYear));
+        const fxPromise = MarketDataFetcher.fetchChartData('KRW=X', startYear, endYear);
 
         const [fxData, ...fetchedResults] = await Promise.all([fxPromise, ...fetchPromises]);
 

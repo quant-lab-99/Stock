@@ -805,13 +805,13 @@
 class YahooFinanceFetcher {
   static async fetchChartData(ticker, startYear, endYear) {
     const sym = ticker === 'KOSPI' ? '^KS11' : ticker;
-    const startSec = Math.floor(new Date(`$-01-01T00:00:00Z`).getTime() / 1000);
-    const endSec = Math.floor(new Date(`$-12-31T23:59:59Z`).getTime() / 1000);
+    const startSec = Math.floor(new Date(`${startYear}-01-01T00:00:00Z`).getTime() / 1000);
+    const endSec = Math.floor(new Date(`${endYear}-12-31T23:59:59Z`).getTime() / 1000);
    
-    const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?period1=$&period2=$&interval=1d&events=div`;
+    const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?period1=${startSec}&period2=${endSec}&interval=1d&events=div`;
    
     const baseProxies = [
-      `$${encodeURIComponent(yahooUrl)}`,
+      `${GLOBAL_QUANT_CONFIG.CORS_WORKER_PROXY}${encodeURIComponent(yahooUrl)}`,
       `https://corsproxy.io/?${encodeURIComponent(yahooUrl)}`,
       `https://api.allorigins.win/raw?url=${encodeURIComponent(yahooUrl)}`
     ];
@@ -829,7 +829,6 @@ class YahooFinanceFetcher {
 
         const timestamps = result.timestamp || result.timestamps || [];
        
-        // 🛠️ [버그 수정] 주식 분할(Stock Split) 및 배당 수정주가(Adj Close) 우선 반영
         const closes = result.indicators?.adjclose?.[0]?.adjclose
                     || result.indicators?.quote?.[0]?.close
                     || [];
@@ -856,7 +855,7 @@ class YahooFinanceFetcher {
 
         if (priceMap.size > 0) return { priceMap, divMap };
       } catch (err) {
-        console.warn(`[YahooFetcher] $ 프록시 연결 시도 중...`);
+        console.warn(`[YahooFetcher] ${proxyUrl} 프록시 연결 시도 중...`);
       }
     }
     return null;
@@ -2336,14 +2335,14 @@ class QuantBacktestEngine {
       const mixFf = FamaFrenchEngine.solve(mixDailyReturns, processedData, sortedDates, ffOfficialMap);
       const { ulcerIndex, painRatio } = InstitutionalAnalyticsEngine.computeUlcerAndPainRatio(mixPortTwrSeries, mixCagr, avgRfAnnPercent);
 
-      const mixKey = `[MIX] $`;
+const mixKey = `[MIX] ${mix.name}`;
       tasksForMonteCarlo.push({ key: mixKey, dailyReturns: mixDailyReturns, monthlyCashFlows: mixCashFlows });
 
-      const wDescStr = mixTickers.map(t => `$:${Math.round(normWeights[t]*100)}%`).join(' ');
+      const wDescStr = mixTickers.map(t => `${t}:${Math.round(normWeights[t]*100)}%`).join(' ');
 
       results[mixKey] = {
         ticker: mixKey,
-        name: `$ ($ / ${mix.rebalanceFreq === 'none' ? '노리밸런싱' : mix.rebalanceFreq})`,
+        name: `${mix.name} (${wDescStr} / ${mix.rebalanceFreq === 'none' ? '노리밸런싱' : mix.rebalanceFreq})`,
         investedKrw: mixInvested,
         finalVal: mixFinalVal,
         cumulativeReturn: mixCumRet,

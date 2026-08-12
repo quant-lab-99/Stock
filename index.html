@@ -862,73 +862,77 @@ class YahooFinanceFetcher {
   }
 }
 
-    class KennethFrenchFetcher {
-      static async fetchOfficialFactors(startYear, endYear) {
-        const cacheKey = `FF_FACTORS_${startYear}_${endYear}_v15_0_REAL_CSV`;
-        const cached = await QuantDataCache.get(cacheKey);
-        if (cached && cached.entries && cached.entries.length > 0) {
-          return new Map(cached.entries);
-        }
+class KennethFrenchFetcher {
+  static async fetchOfficialFactors(startYear, endYear) {
+    const cacheKey = `FF_FACTORS_${startYear}_${endYear}_v15_1_STABLE`;
+    const cached = await QuantDataCache.get(cacheKey);
+    if (cached && cached.entries && cached.entries.length > 0) {
+      return new Map(cached.entries);
+    }
 
-        const factorMap = new Map();
-        const csvUrls = [
-          "https://raw.githubusercontent.com/PacktPublishing/Quantitative-Finance-with-R/master/Datasets/F-F_Research_Data_5_Factors_2x3_daily.CSV",
-          "https://raw.githubusercontent.com/ashgreat/datasets/master/F-F_Research_Data_5_Factors_2x3_daily.csv"
-        ];
+    const factorMap = new Map();
 
-        for (const url of csvUrls) {
-          try {
-            const res = await QuantUtils.fetchWithTimeout(url, { timeout: 10000 });
-            if (!res.ok) continue;
+    // CORS 프록시를 통과하는 신뢰성 높은 최신 Fama-French 데이터 미러 API / CDN 목록
+    const targetUrls = [
+      "https://raw.githubusercontent.com/yfinance-dataset/fama-french-data/main/F-F_Research_Data_5_Factors_2x3_daily.csv",
+      `${GLOBAL_QUANT_CONFIG.CORS_WORKER_PROXY}${encodeURIComponent("https://raw.githubusercontent.com/ashgreat/datasets/master/F-F_Research_Data_5_Factors_2x3_daily.csv")}`
+    ];
 
-            const text = await res.text();
-            const lines = text.split(/\r?\n/);
+    for (const url of targetUrls) {
+      try {
+        const res = await QuantUtils.fetchWithTimeout(url, { timeout: 10000 });
+        if (!res.ok) continue;
 
-            for (let i = 0; i < lines.length; i++) {
-              const trimmed = lines[i].trim();
-              if (!trimmed) continue;
+        const text = await res.text();
+        const lines = text.split(/\r?\n/);
 
-              const parts = trimmed.split(/,|\s+/).filter(Boolean);
-              const dateStr = parts[0];
+        for (let i = 0; i < lines.length; i++) {
+          const trimmed = lines[i].trim();
+          if (!trimmed || trimmed.startsWith(',') || trimmed.startsWith('Copyright')) continue;
 
-              if (/^\d{8}$/.test(dateStr)) {
-                const yyyy = dateStr.substring(0, 4);
-                const mm = dateStr.substring(4, 6);
-                const dd = dateStr.substring(6, 8);
-                const formattedDate = `${yyyy}-${mm}-${dd}`;
-                const yr = parseInt(yyyy, 10);
+          // 날짜, Mkt-RF, SMB, HML, RMW, CMA, RF 구분자 파싱
+          const parts = trimmed.split(/,|\s+/).filter(Boolean);
+          const dateStr = parts[0];
 
-                if (yr >= startYear && yr <= endYear) {
-                  const mktRf = parseFloat(parts[1]) / 100.0 || 0;
-                  const smb = parseFloat(parts[2]) / 100.0 || 0;
-                  const hml = parseFloat(parts[3]) / 100.0 || 0;
-                  
-                  let rf = 0;
-                  if (parts.length >= 7) {
-                    rf = parseFloat(parts[6]) / 100.0 || 0;
-                  } else if (parts.length === 5) {
-                    rf = parseFloat(parts[4]) / 100.0 || 0;
-                  } else if (parts.length > 5) {
-                    rf = parseFloat(parts[parts.length - 1]) / 100.0 || 0;
-                  }
+          if (/^\d{8}$/.test(dateStr)) {
+            const yyyy = dateStr.substring(0, 4);
+            const mm = dateStr.substring(4, 6);
+            const dd = dateStr.substring(6, 8);
+            const formattedDate = `${yyyy}-${mm}-${dd}`;
+            const yr = parseInt(yyyy, 10);
 
-                  const mom = 0.0; 
-                  factorMap.set(formattedDate, { mktRf, smb, hml, mom, rf });
-                }
+            if (yr >= startYear && yr <= endYear) {
+              const mktRf = (parseFloat(parts[1]) || 0) / 100.0;
+              const smb   = (parseFloat(parts[2]) || 0) / 100.0;
+              const hml   = (parseFloat(parts[3]) || 0) / 100.0;
+              
+              // RF 위치 동적 탐색 (열 개수 차이 대응)
+              let rf = 0;
+              if (parts.length >= 7) {
+                rf = (parseFloat(parts[6]) || 0) / 100.0;
+              } else if (parts.length >= 5) {
+                rf = (parseFloat(parts[parts.length - 1]) || 0) / 100.0;
               }
-            }
 
-            if (factorMap.size > 0) {
-              await QuantDataCache.set(cacheKey, { entries: Array.from(factorMap.entries()) });
-              return factorMap;
+              // 모멘텀(MOM) 팩터 기본값 (백테스트 연산 엔진에서 SPY/SPMO 대리 팩터로 상호 보완)
+              const mom = 0.0; 
+              factorMap.set(formattedDate, { mktRf, smb, hml, mom, rf });
             }
-          } catch (err) {
-            console.warn(`[KennethFrenchFetcher] CSV 수신 실패 (${url}):`, err);
           }
         }
-        return null;
+
+        if (factorMap.size > 0) {
+          await QuantDataCache.set(cacheKey, { entries: Array.from(factorMap.entries()) });
+          return factorMap;
+        }
+      } catch (err) {
+        console.warn(`[KennethFrenchFetcher] 수신 시도 실패 (${url}):`, err);
       }
     }
+
+    return null; // 수신 실패 시 프록시 모델로 Fallback
+  }
+}
 
     class HistoricalInterestRates {
       static dynamicRates = new Map();
@@ -1299,118 +1303,136 @@ class YahooFinanceFetcher {
       }
     }
 
-    class MultiFactorSynthesisEngine {
-      static process(rawDatasets, sortedDates) {
-        const processedPrices = {};
-        const processedDivs = {};
-        const N = sortedDates.length;
-        const allSymbols = Object.keys(rawDatasets);
+class MultiFactorSynthesisEngine {
+  static process(rawDatasets, sortedDates) {
+    const processedPrices = {};
+    const processedDivs = {};
+    const N = sortedDates.length;
+    const allSymbols = Object.keys(rawDatasets);
 
-        allSymbols.forEach(symbol => {
-          const raw = rawDatasets[symbol];
-          const priceArr = new Float64Array(N);
-          const divMap = new Map(raw?.divMap || []);
+    allSymbols.forEach(symbol => {
+      const raw = rawDatasets[symbol];
+      const priceArr = new Float64Array(N);
+      const divMap = new Map(raw?.divMap || []);
 
-          let lastPrice = 0;
-          for (let i = 0; i < N; i++) {
-            const d = sortedDates[i];
-            if (raw?.priceMap?.has(d)) {
-              const p = raw.priceMap.get(d);
-              if (p > 0) lastPrice = p;
-            }
-            priceArr[i] = lastPrice;
-          }
-
-          processedPrices[symbol] = priceArr;
-          processedDivs[symbol] = divMap;
-        });
-
-        Object.keys(TICKER_UNIVERSE).forEach(ticker => {
-          const config = TICKER_UNIVERSE[ticker];
-          if (!config.allowBackfill || !config.base) return;
-
-          const basePrices = processedPrices[config.base];
-          const baseDivs = processedDivs[config.base];
-
-          if (!basePrices) return;
-
-          const priceArr = processedPrices[ticker];
-          const divMap = processedDivs[ticker];
-          const raw = rawDatasets[ticker];
-
-          let firstInceptIdx = -1;
-          for (let i = 0; i < N; i++) {
-            if (raw?.priceMap?.has(sortedDates[i])) {
-              firstInceptIdx = i;
-              break;
-            }
-          }
-
-          if (firstInceptIdx > 0) {
-            const minDate = config.backfillMinDate || '1985-01';
-
-            for (let i = firstInceptIdx - 1; i >= 0; i--) {
-              const dateStr = sortedDates[i];
-
-              if (dateStr < minDate) {
-                priceArr[i] = 0;
-                continue;
-              }
-
-              const baseCurr = basePrices[i + 1];
-              const basePrev = basePrices[i];
-
-              if (config.proxyType === 'leveraged' && baseDivs && baseDivs.has(dateStr) && !divMap.has(dateStr)) {
-                divMap.set(dateStr, 0.0);
-              }
-
-              if (baseCurr > 0 && basePrev > 0) {
-                let synthSimpleReturn = 0.0;
-
-                if (config.base === '^TYX' || config.base === '^TNX' || config.base === '^TYX=F') {
-                  const deltaYield = (baseCurr - basePrev) / 100.0;
-                  const modDuration = 17.5;
-                  const convexity = 350.0;
-                  const yieldReturn = (-modDuration * deltaYield) + (0.5 * convexity * Math.pow(deltaYield, 2));
-                  synthSimpleReturn = yieldReturn - (config.fee / 252);
-                } 
-                else if (config.proxyType === 'official_embedded_index') {
-                  const mStr = dateStr.substring(0, 7);
-                  const monthlyAlpha = SPMO_OFFICIAL_MONTHLY_ALPHA[mStr] || 0.005;
-                  const dailyAlpha = monthlyAlpha / 21.0;
-                  const simpleBaseReturn = (baseCurr - basePrev) / basePrev;
-                  synthSimpleReturn = simpleBaseReturn + dailyAlpha - (config.fee / 252);
-                } 
-                else if (config.proxyType === 'leveraged') {
-                  const simpleBaseReturn = (baseCurr - basePrev) / basePrev;
-                  const sofr = HistoricalInterestRates.getSOFR(dateStr);
-                  const lev = config.leverage;
-                  const swapSpread = config.swapSpread || 0.0045;
-                  const trackingErr = config.trackingError || 0.002;
-
-                  const repoCostDaily = (Math.abs(lev - 1) * (sofr + swapSpread)) / 252;
-                  const expenseDaily = (config.fee + trackingErr) / 252;
-
-                  synthSimpleReturn = (lev * simpleBaseReturn) - repoCostDaily - expenseDaily;
-                  synthSimpleReturn = Math.max(-0.999, synthSimpleReturn);
-                } 
-                else {
-                  const simpleBaseReturn = (baseCurr - basePrev) / basePrev;
-                  synthSimpleReturn = simpleBaseReturn - (config.fee / 252);
-                }
-
-                const prevPrice = priceArr[i + 1] / (1.0 + synthSimpleReturn);
-                priceArr[i] = Math.max(0.001, prevPrice);
-              } else {
-                priceArr[i] = 0;
-              }
-            }
-          }
-        });
-
-        return { processedPrices, processedDivs };
+      let lastPrice = 0;
+      for (let i = 0; i < N; i++) {
+        const d = sortedDates[i];
+        if (raw?.priceMap?.has(d)) {
+          const p = raw.priceMap.get(d);
+          if (p > 0) lastPrice = p;
+        }
+        priceArr[i] = lastPrice;
       }
-    }
+
+      processedPrices[symbol] = priceArr;
+      processedDivs[symbol] = divMap;
+    });
+
+    Object.keys(TICKER_UNIVERSE).forEach(ticker => {
+      const config = TICKER_UNIVERSE[ticker];
+      if (!config.allowBackfill || !config.base) return;
+
+      const basePrices = processedPrices[config.base];
+      const baseDivs = processedDivs[config.base];
+
+      if (!basePrices) return;
+
+      const priceArr = processedPrices[ticker];
+      const divMap = processedDivs[ticker];
+      const raw = rawDatasets[ticker];
+
+      let firstInceptIdx = -1;
+      for (let i = 0; i < N; i++) {
+        if (raw?.priceMap?.has(sortedDates[i])) {
+          firstInceptIdx = i;
+          break;
+        }
+      }
+
+      if (firstInceptIdx > 0) {
+        const minDate = config.backfillMinDate || '1985-01';
+
+        for (let i = firstInceptIdx - 1; i >= 0; i--) {
+          const dateStr = sortedDates[i];
+
+          if (dateStr < minDate) {
+            priceArr[i] = 0;
+            continue;
+          }
+
+          const baseCurr = basePrices[i + 1];
+          const basePrev = basePrices[i];
+
+          if (config.proxyType === 'leveraged' && baseDivs && baseDivs.has(dateStr) && !divMap.has(dateStr)) {
+            divMap.set(dateStr, 0.0);
+          }
+
+          if (baseCurr > 0 && basePrev > 0) {
+            let synthSimpleReturn = 0.0;
+
+            // ③ 장기 채권 ETF(TLT/TMF) 합성 이자 수익(Coupon Carry) 반영
+            if (config.base === '^TYX' || config.base === '^TNX' || config.base === '^TYX=F') {
+              const deltaYield = (baseCurr - basePrev) / 100.0;
+              const currentYield = basePrev / 100.0; // 연 금리 % -> 소수점 변환
+              const modDuration = 17.5;
+              const convexity = 350.0;
+
+              // 가격 자본이득(Price Gain) + 채권 이자 수익(Coupon Carry) - 운용보수
+              const priceReturn = (-modDuration * deltaYield) + (0.5 * convexity * Math.pow(deltaYield, 2));
+              const couponCarryDaily = currentYield / 252.0;
+
+              synthSimpleReturn = priceReturn + couponCarryDaily - (config.fee / 252.0);
+            } 
+            else if (config.proxyType === 'official_embedded_index') {
+              const mStr = dateStr.substring(0, 7);
+              const monthlyAlpha = SPMO_OFFICIAL_MONTHLY_ALPHA[mStr] || 0.005;
+              const dailyAlpha = monthlyAlpha / 21.0;
+              const simpleBaseReturn = (baseCurr - basePrev) / basePrev;
+              synthSimpleReturn = simpleBaseReturn + dailyAlpha - (config.fee / 252.0);
+            } 
+            // ④ 롱/인버스 레버리지 ETF 조달비용(Repo Cost) 수식 개편
+            else if (config.proxyType === 'leveraged') {
+              const simpleBaseReturn = (baseCurr - basePrev) / basePrev;
+              const sofr = HistoricalInterestRates.getSOFR(dateStr);
+              const lev = config.leverage;
+              const swapSpread = config.swapSpread || 0.0045;
+              const trackingErr = config.trackingError || 0.002;
+
+              let repoCostDaily = 0.0;
+              if (lev > 0) {
+                // 롱 레버리지: (lev - 1) 배율 자금 차입 이자
+                repoCostDaily = ((lev - 1) * (sofr + swapSpread)) / 252.0;
+              } else {
+                // 숏(인버스) 레버리지: 담보 현금 SOFR 이자 수취 - 주식 대차 수수료 (연 1.5% 대차 수수료 적용)
+                const shortBorrowFee = 0.015;
+                const cashInterestEarned = (Math.abs(lev) + 1) * sofr;
+                const borrowFeePaid = Math.abs(lev) * shortBorrowFee;
+                repoCostDaily = -(cashInterestEarned - borrowFeePaid) / 252.0;
+              }
+
+              const expenseDaily = (config.fee + trackingErr) / 252.0;
+
+              synthSimpleReturn = (lev * simpleBaseReturn) - repoCostDaily - expenseDaily;
+              synthSimpleReturn = Math.max(-0.999, synthSimpleReturn);
+            } 
+            else {
+              const simpleBaseReturn = (baseCurr - basePrev) / basePrev;
+              synthSimpleReturn = simpleBaseReturn - (config.fee / 252.0);
+            }
+
+            const prevPrice = priceArr[i + 1] / (1.0 + synthSimpleReturn);
+            priceArr[i] = Math.max(0.001, prevPrice);
+          } else {
+            priceArr[i] = 0;
+          }
+        }
+      }
+    });
+
+    return { processedPrices, processedDivs };
+  }
+}
 
     class FamaFrenchEngine {
       static solve(portDailyReturns, processedData, dates, ffOfficialMap) {
@@ -1805,27 +1827,9 @@ class YahooFinanceFetcher {
 
 class QuantBacktestEngine {
   static processDividends(divPayQueue, i, priceUsd, fx, taxLotMgr, divMap, dateStr, fxSpreadRate) {
-    const totalShares = taxLotMgr.getTotalShares();
-
-    for (let k = divPayQueue.length - 1; k >= 0; k--) {
-      if (i >= divPayQueue[k].payIndex) {
-        const divNetUsd = divPayQueue[k].divNetUsd;
-        const buyFx = fx * (1 + fxSpreadRate);
-
-        if (priceUsd > 0) {
-          const newShares = divNetUsd / priceUsd;
-          taxLotMgr.buy(newShares, priceUsd, buyFx);
-        }
-        divPayQueue.splice(k, 1);
-      }
-    }
-
-    if (totalShares > 0 && divMap && divMap.has(dateStr)) {
-      const divPerShare = divMap.get(dateStr);
-      const grossDivUsd = totalShares * divPerShare;
-      const netDivUsd = grossDivUsd * (1 - GLOBAL_QUANT_CONFIG.US_DIV_TAX_RATE);
-      divPayQueue.push({ payIndex: i + 1, divNetUsd: netDivUsd });
-    }
+    // 수정주가(Adjusted Close / Total Return) 시세를 사용하므로 배당금 재투자는 주가에 이미 수식 반영되어 있습니다.
+    // 주식 수 추가 증가는 배당 수익 이중 합산(Double-Counting)을 유발하므로 비활성화합니다.
+    return;
   }
 
   static calculateMonthlyDeposit(investConfig, monthCounter, peakPriceUsd, priceUsd) {
@@ -1863,7 +1867,7 @@ class QuantBacktestEngine {
       if (updatedGain > TAX_LIMIT) {
         const taxableGain = updatedGain - TAX_LIMIT;
         const taxPaid = taxableGain * GLOBAL_QUANT_CONFIG.TAX_RATE;
-       
+        
         if (updatedCash < taxPaid) {
           const deficitKrw = taxPaid - updatedCash;
           updatedCash = 0.0;
@@ -2025,7 +2029,7 @@ class QuantBacktestEngine {
 
       const cumulativeReturn = investedKrw > 0 ? ((finalVal - investedKrw) / investedKrw) * 100.0 : 0;
       cashFlowDates.push(sortedDates[N - 1]);
-     
+      
       const annualizedXIRR = BrentXIRRSolver.computeXIRR(monthlyCashFlows, finalVal, cashFlowDates);
 
       const startMs = QuantUtils.parseDateUTC(sortedDates[0]);
@@ -2087,7 +2091,7 @@ class QuantBacktestEngine {
       results[ticker].score = QuantScoreEngine.calculateScore(results[ticker], periodMonths, avgRfAnnPercent);
     }
 
-    // 커스텀 믹스 전략 연산 루프 (🛠️ 자본 유실 방지 동적 비중 재정규화 및 수수료 선차감 반영)
+    // ② 커스텀 믹스 전략 연산 루프 (TWR 리밸런싱 수수료 손실 감가 반영)
     for (let mIdx = 0; mIdx < customMixes.length; mIdx++) {
       await new Promise(resolve => setTimeout(resolve, 0));
 
@@ -2121,7 +2125,6 @@ class QuantBacktestEngine {
       for (let i = 0; i < N; i++) {
         const dateStr = sortedDates[i];
 
-        // 1. 동적 활성 비중 재정규화 (Dynamic Weight Rescaling)
         let activeWeightSum = 0.0;
         const rescaledWeights = {};
 
@@ -2141,27 +2144,6 @@ class QuantBacktestEngine {
           }
         });
 
-        // 2. 활성 종목에 대한 배당 재투자
-        mixTickers.forEach(t => {
-          if (rescaledWeights[t] > 0) {
-            const isKOSPI = (t === 'KOSPI');
-            const fx = isKOSPI ? 1.0 : fxPrices[i];
-            const divMap = processedDivs[t];
-
-            if (divMap && divMap.has(dateStr) && mixShares[t] > 0) {
-              const divPerShare = divMap.get(dateStr);
-              const grossDivUsd = mixShares[t] * divPerShare;
-              const netDivUsd = grossDivUsd * (1 - GLOBAL_QUANT_CONFIG.US_DIV_TAX_RATE);
-              const pUsd = processedPrices[t] ? processedPrices[t][i] : 0.0;
-              if (pUsd > 0) {
-                const buyFx = fx * (1 + (isKOSPI ? 0 : fxSpreadRate));
-                mixShares[t] += netDivUsd / (pUsd * buyFx);
-              }
-            }
-          }
-        });
-
-        // 3. 투입 원금 추가 전 당일 평가금 산출
         let todayTotalValBeforeDeposit = 0;
         mixTickers.forEach(t => {
           const isKOSPI = (t === 'KOSPI');
@@ -2180,7 +2162,6 @@ class QuantBacktestEngine {
           mixPortTwrSeries[i] = mixPortTwrSeries[i - 1] * (1.0 + safeSubRet);
         }
 
-        // 4. 월 적립금 입금 및 리밸런싱 실행
         if (isNewMonth[i]) {
           mixMonthCounter++;
           let depositKrw = 0;
@@ -2208,7 +2189,6 @@ class QuantBacktestEngine {
           let totalPortfolioKrw = todayTotalValBeforeDeposit + depositKrw;
 
           if (doRebalance) {
-            // 리밸런싱 슬리피지/수수료 선 산출
             let rebalanceFrictionCostKrw = 0;
             mixTickers.forEach(t => {
               const targetKrw = totalPortfolioKrw * rescaledWeights[t];
@@ -2223,10 +2203,14 @@ class QuantBacktestEngine {
               }
             });
 
-            // 🛠️ 수수료 차감 후 순자산(netPortfolioKrw) 선 반영
+            // ② 리밸런싱 수수료 손실을 당일 TWR에 직전 반영하여 TWR 왜곡 착시 차단
+            if (totalPortfolioKrw > 0) {
+              const frictionRatio = rebalanceFrictionCostKrw / totalPortfolioKrw;
+              mixPortTwrSeries[i] *= Math.max(0, 1.0 - frictionRatio);
+            }
+
             const netPortfolioKrw = Math.max(0, totalPortfolioKrw - rebalanceFrictionCostKrw);
 
-            // 순자산 기준으로 보유 주식 수(mixShares) 재부여
             mixTickers.forEach(t => {
               const pUsd = processedPrices[t] ? processedPrices[t][i] : 0.0;
               const isKOSPI = (t === 'KOSPI');
@@ -2240,7 +2224,6 @@ class QuantBacktestEngine {
               }
             });
           } else if (depositKrw > 0) {
-            // 노 리밸런싱 상태의 신규 적립금 투입 (활성 비중 기준 분배)
             mixTickers.forEach(t => {
               if (rescaledWeights[t] > 0) {
                 const allocKrw = depositKrw * rescaledWeights[t];
@@ -2255,7 +2238,6 @@ class QuantBacktestEngine {
             });
           }
         } else if (mix.rebalanceFreq === 'yearly' && isYearEnd[i]) {
-          // 매년 말 정기 리밸런싱
           let totalPortfolioKrw = todayTotalValBeforeDeposit;
           let rebalanceFrictionCostKrw = 0;
 
@@ -2271,6 +2253,11 @@ class QuantBacktestEngine {
               rebalanceFrictionCostKrw += Math.abs(diffKrw) * (isKOSPI ? 0 : fxSpreadRate);
             }
           });
+
+          if (totalPortfolioKrw > 0) {
+            const frictionRatio = rebalanceFrictionCostKrw / totalPortfolioKrw;
+            mixPortTwrSeries[i] *= Math.max(0, 1.0 - frictionRatio);
+          }
 
           const netPortfolioKrw = Math.max(0, totalPortfolioKrw - rebalanceFrictionCostKrw);
 
@@ -2288,7 +2275,6 @@ class QuantBacktestEngine {
           });
         }
 
-        // 당일 처리 완료 후 최종 평가금 산출
         let todayTotalVal = 0;
         mixTickers.forEach(t => {
           const isKOSPI = (t === 'KOSPI');
@@ -2327,7 +2313,7 @@ class QuantBacktestEngine {
       const startMs = QuantUtils.parseDateUTC(sortedDates[0]);
       const endMs = QuantUtils.parseDateUTC(sortedDates[N - 1]);
       const elapsedDays = (endMs - startMs) / (1000 * 3600 * 24);
-     
+      
       const finalMixTwr = mixPortTwrSeries[N - 1];
       const mixCagr = (Math.pow(Math.max(1e-6, finalMixTwr), 365.25 / Math.max(1, elapsedDays)) - 1) * 100.0;
 
@@ -2335,7 +2321,7 @@ class QuantBacktestEngine {
       const mixFf = FamaFrenchEngine.solve(mixDailyReturns, processedData, sortedDates, ffOfficialMap);
       const { ulcerIndex, painRatio } = InstitutionalAnalyticsEngine.computeUlcerAndPainRatio(mixPortTwrSeries, mixCagr, avgRfAnnPercent);
 
-const mixKey = `[MIX] ${mix.name}`;
+      const mixKey = `[MIX] ${mix.name}`;
       tasksForMonteCarlo.push({ key: mixKey, dailyReturns: mixDailyReturns, monthlyCashFlows: mixCashFlows });
 
       const wDescStr = mixTickers.map(t => `${t}:${Math.round(normWeights[t]*100)}%`).join(' ');
@@ -2367,7 +2353,7 @@ const mixKey = `[MIX] ${mix.name}`;
     }
 
     if (onProgress) onProgress(80);
-   
+    
     const mcBatchResults = await WorkerManager.runMonteCarloBatchAsync(tasksForMonteCarlo, onProgress);
     Object.keys(mcBatchResults).forEach(key => {
       if (results[key]) {

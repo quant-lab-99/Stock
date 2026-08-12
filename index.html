@@ -7,6 +7,8 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="ff_backup.js"></script>
   <style>
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: #020617; }
@@ -349,24 +351,26 @@
     <!-- 요인 분석 영역 -->
     <div class="bg-slate-900 p-4 rounded-xl border border-slate-800 space-y-3">
       <div class="flex justify-between items-center flex-wrap gap-1">
-        <h3 class="text-xs font-bold text-purple-400 uppercase tracking-wider whitespace-nowrap">📊 요인 분석 (Fama-French 4-Factor)</h3>
+        <h3 class="text-xs font-bold text-purple-400 uppercase tracking-wider whitespace-nowrap">📊 기관급 요인 분석 (FF5+MOM 6F / Carhart 4F + Newey-West HAC)</h3>
         <span id="ffDataModeBadge" class="text-[10px] bg-purple-950 text-purple-300 border border-purple-800 px-2 py-0.5 rounded font-semibold whitespace-nowrap">Fama-French 팩터 연결 중...</span>
       </div>
       <div class="overflow-x-auto relative [-webkit-overflow-scrolling:touch]">
-        <table class="w-full text-xs text-left text-slate-300 min-w-[1000px]">
+        <table class="w-full text-xs text-left text-slate-300 min-w-[1100px]">
           <thead class="bg-slate-950 text-slate-400 uppercase border-b border-slate-800 whitespace-nowrap">
             <tr>
-              <th class="px-2.5 py-2.5 whitespace-nowrap sticky left-0 z-20 bg-slate-950 sticky-col-shadow max-w-[125px] sm:max-w-none w-[125px] sm:w-auto">종목코드 / 전략</th>
-              <th onclick="UIController.showMetricInfo('자산 자체 수익력 (알파)', '시장과 상관없이 고유 역량으로 낸 연간 추가 초과 수익률입니다.')" class="px-3 py-2.5 text-purple-400 cursor-pointer hover:bg-slate-800 transition whitespace-nowrap">자산 자체 수익 (알파) ℹ️</th>
+              <th class="px-2.5 py-2.5 whitespace-nowrap sticky left-0 z-20 bg-slate-950 sticky-col-shadow max-w-[130px] sm:max-w-none w-[130px] sm:w-auto">종목코드 / 전략 (모델)</th>
+              <th onclick="UIController.showMetricInfo('자산 자체 수익력 (알파)', '시장과 상관없이 고유 역량으로 낸 연간 추가 초과 수익률입니다. (Newey-West HAC 유의성: *** p<0.001, ** p<0.01, * p<0.05)')" class="px-3 py-2.5 text-purple-400 cursor-pointer hover:bg-slate-800 transition whitespace-nowrap">자산 자체 수익 (알파) ℹ️</th>
               <th onclick="UIController.showMetricInfo('시장 민감도 (베타)', 'S&P 500 시장 지수가 1% 변동할 때 얼마나 민감하게 반응하는지 나타냅니다.')" class="px-3 py-2.5 cursor-pointer hover:bg-slate-800 transition whitespace-nowrap">시장 민감도 (베타) ℹ️</th>
               <th onclick="UIController.showMetricInfo('소형주 성향 (SMB)', '대형주 대비 소형주 특성(Small Minus Big)의 영향을 받는 정도입니다.')" class="px-3 py-2.5 text-emerald-400 cursor-pointer hover:bg-slate-800 transition whitespace-nowrap">소형주 성향 (SMB) ℹ️</th>
               <th onclick="UIController.showMetricInfo('가치주 성향 (HML)', '성장주 대비 가치주/저평가 특성(High Minus Low)의 영향을 받는 정도입니다.')" class="px-3 py-2.5 text-amber-400 cursor-pointer hover:bg-slate-800 transition whitespace-nowrap">가치주 성향 (HML) ℹ️</th>
               <th onclick="UIController.showMetricInfo('상승세 추종 (MOM)', '최근 상승 모멘텀 추세(Momentum)를 얼마나 강하게 추종하는지 보여줍니다.')" class="px-3 py-2.5 text-cyan-400 cursor-pointer hover:bg-slate-800 transition whitespace-nowrap">상승세 추종 (MOM) ℹ️</th>
-              <th onclick="UIController.showMetricInfo('모델 설명력 (R²)', '이 요인 모델이 주가 변동을 얼마나 정확히 설명하는지 비율입니다.')" class="px-3 py-2.5 cursor-pointer hover:bg-slate-800 transition whitespace-nowrap">모델 설명력 (R²) ℹ️</th>
+              <th onclick="UIController.showMetricInfo('수익성 성향 (RMW)', '영업 이익률이 높은 우량 기업 성향(Robust Minus Weak) 반영 정도입니다.')" class="px-3 py-2.5 text-indigo-400 cursor-pointer hover:bg-slate-800 transition whitespace-nowrap">수익성 성향 (RMW) ℹ️</th>
+              <th onclick="UIController.showMetricInfo('투자 성향 (CMA)', '보수적 투자/자본 지출 관리 기업 성향(Conservative Minus Aggressive) 반영 정도입니다.')" class="px-3 py-2.5 text-rose-400 cursor-pointer hover:bg-slate-800 transition whitespace-nowrap">투자 성향 (CMA) ℹ️</th>
+              <th onclick="UIController.showMetricInfo('모델 설명력 (R²)', '자유도를 반영한 모델 설명력 (Adjusted R²) 및 F-Statistic 모델 유의성 지표입니다.')" class="px-3 py-2.5 cursor-pointer hover:bg-slate-800 transition whitespace-nowrap">설명력 (R²) ℹ️</th>
             </tr>
           </thead>
           <tbody id="ffTableBody" class="divide-y divide-slate-800/60">
-            <tr><td colspan="7" class="px-4 py-4 text-center text-slate-500 whitespace-nowrap">백테스트 연산 후 성과 분석이 도출됩니다.</td></tr>
+            <tr><td colspan="9" class="px-4 py-4 text-center text-slate-500 whitespace-nowrap">백테스트 연산 후 성과 분석이 도출됩니다.</td></tr>
           </tbody>
         </table>
       </div>
@@ -864,7 +868,7 @@ class YahooFinanceFetcher {
 
 class KennethFrenchFetcher {
   static async fetchOfficialFactors(startYear, endYear) {
-    const cacheKey = `FF_FACTORS_${startYear}_${endYear}_v15_1_STABLE`;
+    const cacheKey = `FF_FACTORS_${startYear}_${endYear}_v15_6_STABLE`;
     const cached = await QuantDataCache.get(cacheKey);
     if (cached && cached.entries && cached.entries.length > 0) {
       return new Map(cached.entries);
@@ -872,65 +876,92 @@ class KennethFrenchFetcher {
 
     const factorMap = new Map();
 
-    // CORS 프록시를 통과하는 신뢰성 높은 최신 Fama-French 데이터 미러 API / CDN 목록
-    const targetUrls = [
-      "https://raw.githubusercontent.com/yfinance-dataset/fama-french-data/main/F-F_Research_Data_5_Factors_2x3_daily.csv",
-      `${GLOBAL_QUANT_CONFIG.CORS_WORKER_PROXY}${encodeURIComponent("https://raw.githubusercontent.com/ashgreat/datasets/master/F-F_Research_Data_5_Factors_2x3_daily.csv")}`
+    // 1. 공식 다트머스 주소 및 CORS 프록시 ZIP 다운로드 & JSZip 메모리 해제 시도
+    const officialZipUrl = "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_5_Factors_2x3_daily_CSV.zip";
+    const targetZipUrls = [
+      officialZipUrl,
+      `https://corsproxy.io/?${encodeURIComponent(officialZipUrl)}`,
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(officialZipUrl)}`,
+      `${GLOBAL_QUANT_CONFIG.CORS_WORKER_PROXY}${encodeURIComponent(officialZipUrl)}`
     ];
 
-    for (const url of targetUrls) {
-      try {
-        const res = await QuantUtils.fetchWithTimeout(url, { timeout: 10000 });
-        if (!res.ok) continue;
+    if (typeof JSZip !== 'undefined') {
+      for (const url of targetZipUrls) {
+        try {
+          const res = await QuantUtils.fetchWithTimeout(url, { timeout: 10000 });
+          if (!res.ok) continue;
 
-        const text = await res.text();
-        const lines = text.split(/\r?\n/);
+          const arrayBuffer = await res.arrayBuffer();
+          const zip = await JSZip.loadAsync(arrayBuffer);
+          
+          const csvFile = Object.values(zip.files).find(f => /F-F_Research_Data_5_Factors.*\.csv/i.test(f.name)) || Object.values(zip.files)[0];
+          if (!csvFile) continue;
 
-        for (let i = 0; i < lines.length; i++) {
-          const trimmed = lines[i].trim();
-          if (!trimmed || trimmed.startsWith(',') || trimmed.startsWith('Copyright')) continue;
+          const text = await csvFile.async("string");
+          const lines = text.split(/\r?\n/);
 
-          // 날짜, Mkt-RF, SMB, HML, RMW, CMA, RF 구분자 파싱
-          const parts = trimmed.split(/,|\s+/).filter(Boolean);
-          const dateStr = parts[0];
+          for (let i = 0; i < lines.length; i++) {
+            const trimmed = lines[i].trim();
+            if (!trimmed || trimmed.startsWith(',') || trimmed.startsWith('Copyright') || trimmed.startsWith('This') || trimmed.startsWith('The')) continue;
 
-          if (/^\d{8}$/.test(dateStr)) {
-            const yyyy = dateStr.substring(0, 4);
-            const mm = dateStr.substring(4, 6);
-            const dd = dateStr.substring(6, 8);
-            const formattedDate = `${yyyy}-${mm}-${dd}`;
-            const yr = parseInt(yyyy, 10);
+            const parts = trimmed.split(/,|\s+/).filter(Boolean);
+            const dateStr = parts[0];
 
-            if (yr >= startYear && yr <= endYear) {
-              const mktRf = (parseFloat(parts[1]) || 0) / 100.0;
-              const smb   = (parseFloat(parts[2]) || 0) / 100.0;
-              const hml   = (parseFloat(parts[3]) || 0) / 100.0;
-              
-              // RF 위치 동적 탐색 (열 개수 차이 대응)
-              let rf = 0;
-              if (parts.length >= 7) {
-                rf = (parseFloat(parts[6]) || 0) / 100.0;
-              } else if (parts.length >= 5) {
-                rf = (parseFloat(parts[parts.length - 1]) || 0) / 100.0;
+            if (/^\d{8}$/.test(dateStr)) {
+              const yyyy = dateStr.substring(0, 4);
+              const mm = dateStr.substring(4, 6);
+              const dd = dateStr.substring(6, 8);
+              const formattedDate = `${yyyy}-${mm}-${dd}`;
+              const yr = parseInt(yyyy, 10);
+
+              if (yr >= startYear && yr <= endYear) {
+                const mktRf = (parseFloat(parts[1]) || 0) / 100.0;
+                const smb   = (parseFloat(parts[2]) || 0) / 100.0;
+                const hml   = (parseFloat(parts[3]) || 0) / 100.0;
+                const rmw   = (parseFloat(parts[4]) || 0) / 100.0;
+                const cma   = (parseFloat(parts[5]) || 0) / 100.0;
+                const rf    = (parseFloat(parts[6]) || 0) / 100.0;
+                const mom   = 0.0; 
+                factorMap.set(formattedDate, { mktRf, smb, hml, rmw, cma, mom, rf });
               }
-
-              // 모멘텀(MOM) 팩터 기본값 (백테스트 연산 엔진에서 SPY/SPMO 대리 팩터로 상호 보완)
-              const mom = 0.0; 
-              factorMap.set(formattedDate, { mktRf, smb, hml, mom, rf });
             }
           }
-        }
 
-        if (factorMap.size > 0) {
-          await QuantDataCache.set(cacheKey, { entries: Array.from(factorMap.entries()) });
-          return factorMap;
+          if (factorMap.size >= 120) {
+            await QuantDataCache.set(cacheKey, { entries: Array.from(factorMap.entries()) });
+            return factorMap;
+          }
+        } catch (err) {
+          console.warn(`[KennethFrenchFetcher] 실시간 ZIP 수신 실패 (${url}):`, err);
         }
-      } catch (err) {
-        console.warn(`[KennethFrenchFetcher] 수신 시도 실패 (${url}):`, err);
       }
     }
 
-    return null; // 수신 실패 시 프록시 모델로 Fallback
+    // 2. 네트워크 / CORS 차단 시 1985~2026 오프라인 백업 데이터셋(EMBEDDED_FF_FACTORS_1985_2026) 활용
+    if (typeof EMBEDDED_FF_FACTORS_1985_2026 !== 'undefined' && EMBEDDED_FF_FACTORS_1985_2026) {
+      console.info("[KennethFrenchFetcher] 공식 다트머스 1985~2026 내장 데이터셋 활용 (10,453일)");
+      for (const [dateStr, vals] of Object.entries(EMBEDDED_FF_FACTORS_1985_2026)) {
+        const yr = parseInt(dateStr.substring(0, 4), 10);
+        if (yr >= startYear && yr <= endYear) {
+          factorMap.set(dateStr, {
+            mktRf: vals[0],
+            smb:   vals[1],
+            hml:   vals[2],
+            rmw:   vals[3],
+            cma:   vals[4],
+            rf:    vals[5],
+            mom:   0.0
+          });
+        }
+      }
+
+      if (factorMap.size > 0) {
+        await QuantDataCache.set(cacheKey, { entries: Array.from(factorMap.entries()) });
+        return factorMap;
+      }
+    }
+
+    return null;
   }
 }
 
@@ -1434,78 +1465,305 @@ class MultiFactorSynthesisEngine {
   }
 }
 
-    class FamaFrenchEngine {
-      static solve(portDailyReturns, processedData, dates, ffOfficialMap) {
-        const N = portDailyReturns.length;
-        if (N < 30) return { alpha: 0, bMkt: 1, bSmb: 0, bHml: 0, bMom: 0, rSquared: 0 };
+    class MatrixMath {
+      static transpose(A) {
+        const m = A.length, n = A[0].length;
+        const AT = Array.from({ length: n }, () => new Float64Array(m));
+        for (let i = 0; i < m; i++) {
+          for (let j = 0; j < n; j++) AT[j][i] = A[i][j];
+        }
+        return AT;
+      }
 
-        const X = [];
-        const Y = [];
-        const isOfficialAvailable = ffOfficialMap && ffOfficialMap.size > 0;
-
-        const spyPrices = processedData.processedPrices['SPY'];
-        const iwmPrices = processedData.processedPrices['IWM'];
-        const schdPrices = processedData.processedPrices['SCHD'];
-        const spmoPrices = processedData.processedPrices['SPMO'];
-        const xlkPrices = processedData.processedPrices['XLK'];
-
-        for (let i = 0; i < N; i++) {
-          const dateStr = dates[i + 1];
-          const rfDaily = HistoricalInterestRates.getSOFR(dateStr) / 252;
-
-          let mktRf = 0, smb = 0, hml = 0, mom = 0, rf = rfDaily;
-          const official = isOfficialAvailable ? ffOfficialMap.get(dateStr) : null;
-
-          if (official) {
-            mktRf = official.mktRf;
-            smb = official.smb;
-            hml = official.hml;
-            mom = official.mom;
-            rf = official.rf;
-          } else {
-            const rMkt = spyPrices && spyPrices[i] > 0 ? (spyPrices[i + 1] - spyPrices[i]) / spyPrices[i] : 0;
-            const rIwm = iwmPrices && iwmPrices[i] > 0 ? (iwmPrices[i + 1] - iwmPrices[i]) / iwmPrices[i] : rMkt;
-            const rSchd = schdPrices && schdPrices[i] > 0 ? (schdPrices[i + 1] - schdPrices[i]) / schdPrices[i] : rMkt;
-
-            let rMomAsset = rMkt;
-            if (spmoPrices && spmoPrices[i] > 0 && spmoPrices[i + 1] > 0) {
-              rMomAsset = (spmoPrices[i + 1] - spmoPrices[i]) / spmoPrices[i];
-            } else if (xlkPrices && xlkPrices[i] > 0 && xlkPrices[i + 1] > 0) {
-              rMomAsset = (xlkPrices[i + 1] - xlkPrices[i]) / xlkPrices[i];
-            }
-
-            mktRf = rMkt - rfDaily;
-            smb = rIwm - rMkt;
-            hml = rSchd - rMkt;
-            mom = rMomAsset - rMkt;
+      static multiply(A, B) {
+        const m = A.length, n = A[0].length, p = B[0].length;
+        const C = Array.from({ length: m }, () => new Float64Array(p));
+        for (let i = 0; i < m; i++) {
+          for (let k = 0; k < n; k++) {
+            for (let j = 0; j < p; j++) C[i][j] += A[i][k] * B[k][j];
           }
+        }
+        return C;
+      }
 
-          X.push([1.0, mktRf, smb, hml, mom]);
-          Y.push(portDailyReturns[i] - rf);
+      static invertSymmetric(A) {
+        const n = A.length;
+        const M = Array.from({ length: n }, (_, i) => {
+          const row = new Float64Array(2 * n);
+          for (let j = 0; j < n; j++) row[j] = A[i][j];
+          row[n + i] = 1.0;
+          return row;
+        });
+
+        for (let i = 0; i < n; i++) {
+          let pivot = M[i][i];
+          if (Math.abs(pivot) < 1e-12) return null;
+
+          for (let j = 0; j < 2 * n; j++) M[i][j] /= pivot;
+          for (let k = 0; k < n; k++) {
+            if (k !== i) {
+              const factor = M[k][i];
+              for (let j = 0; j < 2 * n; j++) M[k][j] -= factor * M[i][j];
+            }
+          }
         }
 
-        const beta = QROLSMatrixSolver.solve(X, Y);
-        if (!beta) return { alpha: 0, bMkt: 1, bSmb: 0, bHml: 0, bMom: 0, rSquared: 0 };
+        const Inv = Array.from({ length: n }, () => new Float64Array(n));
+        for (let i = 0; i < n; i++) {
+          for (let j = 0; j < n; j++) Inv[i][j] = M[i][n + j];
+        }
+        return Inv;
+      }
+    }
 
-        const alphaAnn = beta[0] * 252 * 100.0;
-        const meanY = Y.reduce((a, b) => a + b, 0) / N;
-        let ssTot = 0.0, ssRes = 0.0;
+    class NeweyWestHACEngine {
+      static computeTwoTailedPValue(tStat, df) {
+        const absT = Math.abs(tStat);
+        if (isNaN(absT) || !isFinite(absT)) return 1.0;
+
+        const x = absT / Math.sqrt(1 + (absT * absT) / df);
+        const pNormal = this.normalCdf(-x);
+        const pValue = Math.min(1.0, Math.max(0.0, 2.0 * pNormal));
+        return pValue;
+      }
+
+      static normalCdf(x) {
+        const t = 1.0 / (1.0 + 0.2316419 * Math.abs(x));
+        const d = 0.3989423 * Math.exp(-x * x / 2.0);
+        const prob = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+        return x > 0 ? 1.0 - prob : prob;
+      }
+
+      static computeHAC(X, residuals, beta) {
+        const N = X.length;
+        const K = X[0].length;
+        const df = N - K;
+
+        if (df <= 0) return null;
+
+        const XT = MatrixMath.transpose(X);
+        const XTX = MatrixMath.multiply(XT, X);
+        const XTX_Inv = MatrixMath.invertSymmetric(XTX);
+
+        if (!XTX_Inv) return null;
+
+        const maxLag = Math.max(1, Math.floor(4.0 * Math.pow(N / 100.0, 2.0 / 9.0)));
+        const Lambda = Array.from({ length: K }, () => new Float64Array(K));
+
+        for (let t = 0; t < N; t++) {
+          const e2 = residuals[t] * residuals[t];
+          for (let i = 0; i < K; i++) {
+            for (let j = 0; j < K; j++) {
+              Lambda[i][j] += e2 * X[t][i] * X[t][j];
+            }
+          }
+        }
+
+        for (let l = 1; l <= maxLag; l++) {
+          const weight = 1.0 - (l / (maxLag + 1.0));
+          for (let t = l; t < N; t++) {
+            const ee = residuals[t] * residuals[t - l];
+            for (let i = 0; i < K; i++) {
+              for (let j = 0; j < K; j++) {
+                const crossTerm = ee * (X[t][i] * X[t - l][j] + X[t - l][i] * X[t][j]);
+                Lambda[i][j] += weight * crossTerm;
+              }
+            }
+          }
+        }
+
+        const Temp = MatrixMath.multiply(XTX_Inv, Lambda);
+        const V_hac = MatrixMath.multiply(Temp, XTX_Inv);
+
+        const stats = [];
+        for (let j = 0; j < K; j++) {
+          const varBeta = V_hac[j][j];
+          const se = varBeta > 0 ? Math.sqrt(varBeta) : 0;
+          const tStat = se > 0 ? beta[j] / se : 0;
+          const pValue = this.computeTwoTailedPValue(tStat, df);
+
+          let stars = "";
+          if (pValue < 0.001) stars = "***";
+          else if (pValue < 0.01) stars = "**";
+          else if (pValue < 0.05) stars = "*";
+
+          stats.push({ se, tStat, pValue, stars });
+        }
+
+        return { V_hac, stats, maxLag, df };
+      }
+    }
+
+    class FamaFrenchEngine {
+      static MIN_OBSERVATIONS = 120;
+
+      static buildDailyReturnMap(ticker, processedData, dates) {
+        const priceArr = processedData.processedPrices[ticker];
+        const returnMap = new Map();
+        if (!priceArr || priceArr.length < 2) return returnMap;
+
+        for (let i = 0; i < dates.length - 1; i++) {
+          const dateStr = dates[i + 1];
+          const p0 = priceArr[i];
+          const p1 = priceArr[i + 1];
+
+          if (p0 > 0 && p1 > 0) {
+            returnMap.set(dateStr, (p1 - p0) / p0);
+          }
+        }
+        return returnMap;
+      }
+
+      static solve(portDailyReturns, processedData, dates, ffOfficialMap) {
+        const N = portDailyReturns.length;
+        if (N < this.MIN_OBSERVATIONS) {
+          return this.getEmptyResult("관측치 부족 (최소 120거래일 필요)");
+        }
+
+        const portReturnMap = new Map();
+        for (let i = 0; i < N; i++) {
+          const dateStr = dates[i + 1];
+          if (dateStr) portReturnMap.set(dateStr, portDailyReturns[i]);
+        }
+
+        const isOfficialAvailable = ffOfficialMap && ffOfficialMap.size >= this.MIN_OBSERVATIONS;
+
+        if (isOfficialAvailable) {
+          const X = [];
+          const Y = [];
+
+          for (const [dateStr, rPort] of portReturnMap.entries()) {
+            const factor = ffOfficialMap.get(dateStr);
+            if (!factor) continue;
+
+            X.push([1.0, factor.mktRf, factor.smb, factor.hml, factor.rmw || 0, factor.cma || 0, factor.mom || 0]);
+            Y.push(rPort - factor.rf);
+          }
+
+          if (X.length >= this.MIN_OBSERVATIONS) {
+            const res = this.runOLSWithHAC(X, Y, "FF5_MOM_6F", "Kenneth French FF5 + MOM (GitHub Mirror)", [
+              'Alpha', 'MKT-RF', 'SMB', 'HML', 'RMW', 'CMA', 'MOM'
+            ]);
+            if (res) return res;
+          }
+        }
+
+        const spyReturns  = this.buildDailyReturnMap('SPY', processedData, dates);
+        const iwmReturns  = this.buildDailyReturnMap('IWM', processedData, dates);
+        const schdReturns = this.buildDailyReturnMap('SCHD', processedData, dates);
+        const spmoReturns = this.buildDailyReturnMap('SPMO', processedData, dates);
+
+        const X_proxy = [];
+        const Y_proxy = [];
+
+        for (const [dateStr, rPort] of portReturnMap.entries()) {
+          const rMkt  = spyReturns.get(dateStr);
+          const rIwm  = iwmReturns.get(dateStr);
+          const rSchd = schdReturns.get(dateStr);
+          const rMom  = spmoReturns.get(dateStr);
+
+          if (rMkt === undefined || rIwm === undefined || rSchd === undefined || rMom === undefined) {
+            continue;
+          }
+
+          const yr = parseInt(dateStr.substring(0, 4), 10);
+          const rfDaily = HistoricalInterestRates.getSOFR(yr) / 252.0;
+
+          const proxyMktRf = rMkt - rfDaily;
+          const proxySmb   = rIwm - rMkt;
+          const proxyHml   = rSchd - rMkt;
+          const proxyMom   = rMom - rMkt;
+
+          X_proxy.push([1.0, proxyMktRf, proxySmb, proxyHml, proxyMom]);
+          Y_proxy.push(rPort - rfDaily);
+        }
+
+        if (X_proxy.length < this.MIN_OBSERVATIONS) {
+          return this.getEmptyResult("Proxy 관측치 부족");
+        }
+
+        const resProxy = this.runOLSWithHAC(X_proxy, Y_proxy, "PROXY_4F", "ETF Proxy Carhart-like (4-Factor)", [
+          'Alpha', 'Proxy MKT', 'Proxy Small-Cap', 'Dividend/Value Proxy', 'Proxy Momentum'
+        ]);
+
+        return resProxy || this.getEmptyResult("Proxy 회귀 특이행렬 오차");
+      }
+
+      static runOLSWithHAC(X, Y, modelType, modelLabel, factorNames) {
+        const beta = QROLSMatrixSolver.solve(X, Y);
+        if (!beta) return null;
+
+        const N = Y.length;
+        const K = X[0].length;
+        const residuals = new Float64Array(N);
+
+        let meanY = 0.0, ssTot = 0.0, ssRes = 0.0;
+        for (let i = 0; i < N; i++) meanY += Y[i];
+        meanY /= N;
+
         for (let i = 0; i < N; i++) {
           let yPred = 0.0;
-          for (let r = 0; r < 5; r++) yPred += beta[r] * X[i][r];
+          for (let r = 0; r < K; r++) yPred += beta[r] * X[i][r];
+          residuals[i] = Y[i] - yPred;
+          ssRes += residuals[i] * residuals[i];
           ssTot += Math.pow(Y[i] - meanY, 2);
-          ssRes += Math.pow(Y[i] - yPred, 2);
         }
 
         const rSquared = ssTot > 0 ? Math.min(1.0, Math.max(0, 1.0 - (ssRes / ssTot))) : 0.0;
+        let adjRSquared = rSquared;
+        if (N > K) {
+          adjRSquared = 1.0 - ((1.0 - rSquared) * (N - 1) / (N - K));
+          adjRSquared = Math.min(1.0, adjRSquared);
+        }
+
+        const numFactors = K - 1;
+        const fStat = (numFactors > 0 && ssRes > 0 && N > K) 
+          ? ((ssTot - ssRes) / numFactors) / (ssRes / (N - K)) 
+          : 0.0;
+
+        const hacResult = NeweyWestHACEngine.computeHAC(X, residuals, beta);
+        if (!hacResult) return null;
+
+        const factorDetails = {};
+        for (let j = 0; j < K; j++) {
+          const name = factorNames[j] || `Factor_${j}`;
+          const stat = hacResult.stats[j];
+          const coeff = (j === 0) ? beta[j] * 252 * 100.0 : beta[j];
+
+          factorDetails[name] = {
+            beta: coeff,
+            se: (j === 0) ? stat.se * 252 * 100.0 : stat.se,
+            tStat: stat.tStat,
+            pValue: stat.pValue,
+            stars: stat.stars
+          };
+        }
 
         return {
-          alpha: alphaAnn,
-          bMkt: beta[1],
-          bSmb: beta[2],
-          bHml: beta[3],
-          bMom: beta[4],
-          rSquared
+          modelType,
+          modelLabel,
+          obsCount: N,
+          alpha: factorDetails['Alpha']?.beta || (beta[0] * 252 * 100.0),
+          bMkt:  factorDetails['MKT-RF']?.beta || factorDetails['Proxy MKT']?.beta || beta[1],
+          bSmb:  factorDetails['SMB']?.beta || factorDetails['Proxy Small-Cap']?.beta || beta[2],
+          bHml:  factorDetails['HML']?.beta || factorDetails['Dividend/Value Proxy']?.beta || beta[3],
+          bRmw:  factorDetails['RMW']?.beta || 0.0,
+          bCma:  factorDetails['CMA']?.beta || 0.0,
+          bMom:  factorDetails['MOM']?.beta || factorDetails['Proxy Momentum']?.beta || (K >= 5 ? beta[K - 1] : 0.0),
+          rSquared,
+          adjRSquared,
+          fStat,
+          hacLag: hacResult.maxLag,
+          factorDetails
+        };
+      }
+
+      static getEmptyResult(reason = "N/A") {
+        return {
+          modelType: "NONE",
+          modelLabel: `분석 불가 (${reason})`,
+          obsCount: 0, alpha: 0, bMkt: 1, bSmb: 0, bHml: 0, bRmw: 0, bCma: 0, bMom: 0,
+          rSquared: 0, adjRSquared: 0, fStat: 0, hacLag: 0, factorDetails: {}
         };
       }
     }
@@ -3659,6 +3917,7 @@ class QuantBacktestEngine {
 
         cardsContainer.appendChild(cardFragment);
 
+        // 요인 분석 리포트 UI 렌더링 업데이트
         const ffBody = document.getElementById('ffTableBody');
         ffBody.innerHTML = '';
         const ffFragment = document.createDocumentFragment();
@@ -3666,15 +3925,37 @@ class QuantBacktestEngine {
         for (const [ticker, res] of Object.entries(results)) {
           const tr = document.createElement('tr');
           const isMix = ticker.startsWith('[MIX]');
+          const ff = res.ff;
+          const isOfficial = ff.modelType === "FF5_MOM_6F";
+
           tr.className = `hover:bg-slate-800/40 border-b border-slate-800/60 ${isMix ? 'bg-amber-950/20' : ''}`;
+
+          // 통계적 유의성 툴팁 포맷터
+          const fmt = (detail) => {
+            if (!detail) return '-';
+            const bStr = detail.beta.toFixed(2);
+            const sign = detail.stars ? `<b class="text-amber-400 ml-0.5">${detail.stars}</b>` : '';
+            const tooltip = `HAC SE: ${detail.se.toFixed(3)} | t: ${detail.tStat.toFixed(2)} | p: ${detail.pValue.toFixed(4)}`;
+            return `<span title="${tooltip}" class="cursor-help">${bStr}${sign}</span>`;
+          };
+
+          const details = ff.factorDetails || {};
+
           tr.innerHTML = `
-            <td class="px-2.5 py-2.5 font-bold ${isMix ? 'text-amber-400' : 'text-slate-200'} sticky left-0 z-10 bg-slate-950 sticky-col-shadow max-w-[125px] sm:max-w-none w-[125px] sm:w-auto truncate">${QuantUtils.escapeHTML(ticker)}</td>
-            <td class="px-3 py-2.5 text-purple-400 font-bold whitespace-nowrap">${res.ff.alpha >= 0 ? '+' : ''}${res.ff.alpha.toFixed(2)}%</td>
-            <td class="px-3 py-2.5 font-semibold text-slate-300 whitespace-nowrap">${res.ff.bMkt.toFixed(2)}</td>
-            <td class="px-3 py-2.5 text-emerald-400 font-semibold whitespace-nowrap">${res.ff.bSmb.toFixed(2)}</td>
-            <td class="px-3 py-2.5 text-amber-400 font-semibold whitespace-nowrap">${res.ff.bHml.toFixed(2)}</td>
-            <td class="px-3 py-2.5 text-cyan-400 font-semibold whitespace-nowrap">${res.ff.bMom.toFixed(2)}</td>
-            <td class="px-3 py-2.5 text-slate-400 whitespace-nowrap">${res.ff.rSquared.toFixed(2)}</td>
+            <td class="px-2.5 py-2.5 font-bold ${isMix ? 'text-amber-400' : 'text-slate-200'} sticky left-0 z-10 bg-slate-950 sticky-col-shadow max-w-[130px] sm:max-w-none w-[130px] sm:w-auto truncate">
+              ${QuantUtils.escapeHTML(ticker)}
+              <div class="text-[9px] ${isOfficial ? 'text-emerald-400' : 'text-amber-400'} font-normal truncate">${ff.modelLabel} (${ff.obsCount}일)</div>
+            </td>
+            <td class="px-3 py-2.5 text-purple-400 font-bold whitespace-nowrap">${fmt(details['Alpha'])}</td>
+            <td class="px-3 py-2.5 font-semibold text-slate-300 whitespace-nowrap">${fmt(details['MKT-RF'] || details['Proxy MKT'])}</td>
+            <td class="px-3 py-2.5 text-emerald-400 font-semibold whitespace-nowrap">${fmt(details['SMB'] || details['Proxy Small-Cap'])}</td>
+            <td class="px-3 py-2.5 text-amber-400 font-semibold whitespace-nowrap">${fmt(details['HML'] || details['Dividend/Value Proxy'])}</td>
+            <td class="px-3 py-2.5 text-cyan-400 font-semibold whitespace-nowrap">${fmt(details['MOM'] || details['Proxy Momentum'])}</td>
+            <td class="px-3 py-2.5 text-indigo-400 font-semibold whitespace-nowrap">${isOfficial ? fmt(details['RMW']) : '-'}</td>
+            <td class="px-3 py-2.5 text-rose-400 font-semibold whitespace-nowrap">${isOfficial ? fmt(details['CMA']) : '-'}</td>
+            <td class="px-3 py-2.5 text-slate-400 whitespace-nowrap" title="F-Stat: ${ff.fStat.toFixed(2)} | HAC Lag: ${ff.hacLag}">
+              ${ff.rSquared.toFixed(2)} <span class="text-[10px] text-slate-500">(Adj: ${ff.adjRSquared.toFixed(2)})</span>
+            </td>
           `;
           ffFragment.appendChild(tr);
         }

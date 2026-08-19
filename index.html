@@ -102,6 +102,36 @@
       </div>
     </div>
 
+    <!-- 🚀 초보자를 위한 1초 추천 프리셋 바 -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 sm:p-4 space-y-2.5">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <span class="text-xs font-bold text-amber-400 flex items-center gap-1.5 whitespace-nowrap">
+          🚀 1초 완성 추천 프리셋 (처음이시라면 눌러보세요!)
+        </span>
+        <button onclick="UIController.showGlossaryModal()" class="text-xs text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1 bg-slate-950 px-2.5 py-1 rounded border border-emerald-800/60 transition whitespace-nowrap">
+          📖 초보자 1분 금융용어 사전
+        </button>
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+        <button onclick="UIController.applyPreset('popular_dca')" class="p-2.5 bg-slate-950 hover:bg-slate-800 border border-slate-700 hover:border-emerald-500 rounded-lg text-left transition group">
+          <span class="font-bold text-emerald-400 block group-hover:text-emerald-300">🌟 국민 적립식 (20년)</span>
+          <span class="text-[10px] text-slate-400 block mt-0.5">QQQ + SPY + 코스피 월 50만</span>
+        </button>
+        <button onclick="UIController.applyPreset('growth_leveraged')" class="p-2.5 bg-slate-950 hover:bg-slate-800 border border-slate-700 hover:border-amber-500 rounded-lg text-left transition group">
+          <span class="font-bold text-amber-400 block group-hover:text-amber-300">⚡ 나스닥 2배 공격형</span>
+          <span class="text-[10px] text-slate-400 block mt-0.5">QQQ 50% + QLD 50% 월 50만</span>
+        </button>
+        <button onclick="UIController.applyPreset('all_weather')" class="p-2.5 bg-slate-950 hover:bg-slate-800 border border-slate-700 hover:border-cyan-500 rounded-lg text-left transition group">
+          <span class="font-bold text-cyan-400 block group-hover:text-cyan-300">🛡️ 올웨더 자산배분</span>
+          <span class="text-[10px] text-slate-400 block mt-0.5">주식 50% + 채권 30% + 금 20%</span>
+        </button>
+        <button onclick="UIController.applyPreset('lump_sum_50m')" class="p-2.5 bg-slate-950 hover:bg-slate-800 border border-slate-700 hover:border-purple-500 rounded-lg text-left transition group">
+          <span class="font-bold text-purple-400 block group-hover:text-purple-300">💰 5천만원 목돈 거치</span>
+          <span class="text-[10px] text-slate-400 block mt-0.5">SPY 70% + 코스피 30% 일시투입</span>
+        </button>
+      </div>
+    </div>
+
     <!-- 백테스트 조건 설정 영역 -->
     <div class="bg-slate-900 p-4 rounded-xl border border-slate-800 space-y-4">
       <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -2680,7 +2710,7 @@ class QuantBacktestEngine {
     }
 
     class UIController {
-      static selectedTickers = ['QQQ', 'GGLL', 'KOSPI'];
+      static selectedTickers = ['QQQ', 'SPY', 'KOSPI'];
       static customMixesStore = null;
       static chartInstance = null;
       static activeTab = 'portfolio';
@@ -2748,13 +2778,13 @@ class QuantBacktestEngine {
         this.selectedTickers.forEach(ticker => {
           const cfg = TICKER_UNIVERSE[ticker];
           const minDate = cfg?.backfillMinDate || cfg?.inceptDate;
-          if (cfg && !cfg.allowBackfill && startMonth < minDate) {
+          if (cfg && startMonth < minDate) {
             unavailableSelected.push(ticker);
           }
         });
 
         if (unavailableSelected.length > 0) {
-          ToastNotifier.show(`⚠️ 현재 시작 월(${startMonth}) 기준 백필 불가 종목 포함됨: ${unavailableSelected.join(', ')}`, 'warning');
+          ToastNotifier.show(`⚠️ 현재 시작 월(${startMonth}) 기준 데이터 미존재 종목 포함됨: ${unavailableSelected.join(', ')}`, 'warning');
         }
       }
 
@@ -2766,7 +2796,7 @@ class QuantBacktestEngine {
             initialMixes = JSON.parse(stored);
           } else {
             initialMixes = [
-              { id: 'mix_1', name: '기술주 2배 혼합 믹스 (GOOGL 2배 포함)', enabled: true, rebalanceFreq: 'monthly', allocations: { 'QQQ': 50, 'GGLL': 50 } },
+              { id: 'mix_1', name: '나스닥 100 & 레버리지 믹스 (QQQ/QLD)', enabled: true, rebalanceFreq: 'monthly', allocations: { 'QQQ': 50, 'QLD': 50 } },
               { id: 'mix_2', name: '한·미 글로벌 자산배분 믹스', enabled: true, rebalanceFreq: 'yearly', allocations: { 'SPY': 50, 'KOSPI': 30, 'GLD': 20 } }
             ];
           }
@@ -2802,6 +2832,111 @@ class QuantBacktestEngine {
           content.classList.add('hidden');
           icon.innerText = '▼ 펼치기';
         }
+      }
+
+      static applyPreset(presetKey) {
+        if (presetKey === 'popular_dca') {
+          document.getElementById('startMonth').value = '2004-01';
+          document.getElementById('investMode').value = 'dca';
+          document.getElementById('monthlyKrw').value = '500000';
+          this.selectedTickers = ['QQQ', 'SPY', 'KOSPI'];
+          ToastNotifier.show("🌟 '국민 적립식 (QQQ + SPY + 코스피)' 프리셋이 적용되었습니다.", "success");
+        } else if (presetKey === 'growth_leveraged') {
+          document.getElementById('startMonth').value = '2006-06';
+          document.getElementById('investMode').value = 'dca';
+          document.getElementById('monthlyKrw').value = '500000';
+          this.selectedTickers = ['QQQ', 'QLD'];
+          ToastNotifier.show("⚡ '나스닥 2배 공격형 (QQQ + QLD)' 프리셋이 적용되었습니다.", "success");
+        } else if (presetKey === 'all_weather') {
+          document.getElementById('startMonth').value = '2004-11';
+          document.getElementById('investMode').value = 'dca';
+          document.getElementById('monthlyKrw').value = '500000';
+          this.selectedTickers = ['SPY', 'TLT', 'GLD'];
+          ToastNotifier.show("🛡️ '올웨더 자산배분 (주식 + 장기채 + 금)' 프리셋이 적용되었습니다.", "success");
+        } else if (presetKey === 'lump_sum_50m') {
+          document.getElementById('startMonth').value = '2000-01';
+          document.getElementById('investMode').value = 'lumpSum';
+          document.getElementById('lumpSumKrw').value = '50000000';
+          this.selectedTickers = ['SPY', 'KOSPI'];
+          ToastNotifier.show("💰 '5천만원 목돈 거치식 (SPY + 코스피)' 프리셋이 적용되었습니다.", "success");
+        }
+
+        this.onInvestModeChange();
+        this.onDateChange();
+        this.updateActiveChips();
+        this.runBacktest();
+      }
+
+      static showGlossaryModal() {
+        let modal = document.getElementById('glossaryModal');
+        if (!modal) {
+          modal = document.createElement('div');
+          modal.id = 'glossaryModal';
+          modal.className = 'fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3';
+          document.body.appendChild(modal);
+        }
+
+        modal.innerHTML = `
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+            <div class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900">
+              <h3 class="font-bold text-sm text-emerald-400 flex items-center gap-2">
+                📖 초보자를 위한 1분 금융 & 퀀트 핵심 용어사전
+              </h3>
+              <button onclick="document.getElementById('glossaryModal').classList.add('hidden')" class="text-slate-400 hover:text-slate-100 text-lg font-bold px-2">&times;</button>
+            </div>
+            <div class="p-4 overflow-y-auto space-y-4 text-xs leading-relaxed text-slate-300">
+              <!-- 수익성 -->
+              <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1.5">
+                <h4 class="font-bold text-emerald-400 text-sm flex items-center gap-1.5">📈 수익률 용어</h4>
+                <ul class="space-y-2 pt-1">
+                  <li><b class="text-emerald-300">실질 연복리 수익률 (XIRR):</b> 매달 50만 원씩 적립식으로 넣었을 때 내가 체감하는 '진짜 은행 적금 복리 이자율'입니다. 실제 입금 날짜와 현금흐름을 정확히 계산합니다.</li>
+                  <li><b class="text-emerald-300">시간가치 연수익률 (CAGR):</b> 첫날 100만 원을 넣고 가만히 두었을 때 매년 평균 몇 %씩 불어났는지를 나타내는 복리 성장률입니다.</li>
+                  <li><b class="text-emerald-300">누적 수익률:</b> 내가 총 넣은 원금 대비 최종적으로 몇 %의 이익을 얻었는지 나타냅니다. (예: 1억 넣어서 2억 되면 +100%)</li>
+                </ul>
+              </div>
+
+              <!-- 위험 & 방어력 -->
+              <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1.5">
+                <h4 class="font-bold text-rose-400 text-sm flex items-center gap-1.5">🛡️ 위험 및 방어력 용어</h4>
+                <ul class="space-y-2 pt-1">
+                  <li><b class="text-rose-300">최대 낙폭 (MDD):</b> 고점에서 물렸을 때 계좌가 최대 몇 %까지 마이너스 났었는지 나타내는 '가장 마음 아픈 순간'입니다. (예: -30%면 1억이 7천만 원까지 떨어졌던 적이 있음)</li>
+                  <li><b class="text-amber-300">소티노 비율 (Sortino):</b> 단순히 오르내리는 변동성이 아니라, '떨어질 때의 위험'만 따져서 1만큼의 하락 위험 대비 얼마의 수익을 냈는지 보는 가성비 지표입니다. (1.0 이상이면 우수)</li>
+                  <li><b class="text-rose-300">얼서 지수 (Ulcer Index):</b> 원금을 회복할 때까지 얼마나 깊고 오랫동안 물려있었는지를 측정한 고통 지표입니다. 낮을수록 마음 편한 투자입니다.</li>
+                  <li><b class="text-rose-300">CVaR 95% (조건부 최대 손실):</b> 금융위기 같은 최악의 5% 폭락 상황이 닥쳤을 때 하루에 평균 몇 %가 빠질 수 있는지를 측정한 꼬리 위험(Tail Risk)입니다.</li>
+                </ul>
+              </div>
+
+              <!-- 요인 분석 -->
+              <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1.5">
+                <h4 class="font-bold text-purple-400 text-sm flex items-center gap-1.5">🔬 기관급 요인 분석 (Fama-French)</h4>
+                <ul class="space-y-2 pt-1">
+                  <li><b class="text-purple-300">알파 (Alpha, α):</b> 시장이 오르고 내린 것과 상관없이, 종목이나 전략의 고유한 실력으로 낸 연간 추가 초과 수익률입니다. (플러스일수록 뛰어난 전략)</li>
+                  <li><b class="text-slate-200">베타 (Beta, β):</b> S&P 500 시장 지수가 1% 움직일 때 내 포트폴리오가 몇 % 반응하는지 나타냅니다. (1.5면 시장보다 1.5배 출렁임)</li>
+                  <li><b class="text-emerald-300">SMB (소형주 효과):</b> 대형주 대비 소형주 성향의 프리미엄을 받는 정도입니다.</li>
+                  <li><b class="text-amber-300">HML (가치주 효과):</b> 성장주 대비 저평가 가치주 성향의 프리미엄을 받는 정도입니다.</li>
+                  <li><b class="text-cyan-300">MOM (모멘텀):</b> 최근 강하게 오르는 상승 추세를 얼마나 추종하는지 나타냅니다.</li>
+                </ul>
+              </div>
+
+              <!-- 몬테카를로 & 절세 -->
+              <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1.5">
+                <h4 class="font-bold text-cyan-400 text-sm flex items-center gap-1.5">🎲 시뮬레이션 및 절세</h4>
+                <ul class="space-y-2 pt-1">
+                  <li><b class="text-cyan-300">몬테카를로 10,000회 (P50/P5):</b> 과거 시장 데이터를 1만 번 무작위로 섞어서 앞으로 발생할 수 있는 미래 시나리오를 예측합니다. P50은 가장 유력한 중간값, P5는 최악의 5% 위기 상황 잔고입니다.</li>
+                  <li><b class="text-emerald-300">FIFO 세후 과세:</b> 해외 ETF 매매차익에 대해 연간 250만 원 기본공제를 차감한 후 22% 양도소득세를 먼저 산 주식부터 차감(선입선출)하여 계산한 '진짜 내 손에 남는 돈'입니다.</li>
+                  <li><b class="text-amber-300">리밸런싱 (Rebalancing):</b> 많이 오른 자산을 일부 팔고 덜 오른 자산을 사서 처음에 정한 목표 비율(예: 주식 50% : 채권 50%)을 정기적으로 복원하는 안전 관리 기법입니다.</li>
+                </ul>
+              </div>
+            </div>
+            <div class="p-3 border-t border-slate-800 bg-slate-950 flex justify-end">
+              <button onclick="document.getElementById('glossaryModal').classList.add('hidden')" class="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs py-2 px-5 rounded-lg transition whitespace-nowrap">
+                닫기
+              </button>
+            </div>
+          </div>
+        `;
+
+        modal.classList.remove('hidden');
       }
 
       static showMetricInfo(title, description) {
@@ -2992,7 +3127,7 @@ class QuantBacktestEngine {
           name: `나만의 믹스 ${this.customMixes.length + 1}`,
           enabled: true,
           rebalanceFreq: 'monthly',
-          allocations: { 'QQQ': 50, 'GGLL': 50 }
+          allocations: { 'QQQ': 50, 'SPY': 50 }
         });
       }
 
@@ -3102,7 +3237,7 @@ class QuantBacktestEngine {
           const invalidTickersInMix = tickers.filter(t => {
             const cfg = TICKER_UNIVERSE[t];
             const minDate = cfg?.backfillMinDate || cfg?.inceptDate;
-            return cfg && !cfg.allowBackfill && currentStartMonth < minDate;
+            return cfg && currentStartMonth < minDate;
           });
 
           const isMixDisabledByDate = invalidTickersInMix.length > 0;
@@ -3148,7 +3283,7 @@ class QuantBacktestEngine {
                 ${tickers.map(t => {
                   const cfg = TICKER_UNIVERSE[t];
                   const minDate = cfg?.backfillMinDate || cfg?.inceptDate;
-                  const isUnavail = cfg && !cfg.allowBackfill && currentStartMonth < minDate;
+                  const isUnavail = cfg && currentStartMonth < minDate;
                   return `
                     <div class="bg-slate-900 p-1.5 rounded border ${isUnavail ? 'border-rose-600/80 bg-rose-950/20' : 'border-slate-800'} flex items-center justify-between gap-1">
                       <div class="flex flex-col truncate min-w-0">
@@ -3446,7 +3581,7 @@ class QuantBacktestEngine {
           const isChecked = this.selectedTickers.includes(ticker);
           const inceptDate = item.inceptDate || `${item.inceptYear || 2000}-01`;
           const minDate = item.backfillMinDate || inceptDate;
-          const isUnavailable = !item.allowBackfill && currentStartMonth < minDate;
+          const isUnavailable = currentStartMonth < minDate;
 
           const label = document.createElement('label');
           label.id = `label-chk-${ticker}`;
@@ -3460,16 +3595,21 @@ class QuantBacktestEngine {
 
           let backfillTag = '';
           if (isUnavailable) {
-            backfillTag = `<span class="text-[9px] bg-rose-950 text-rose-300 border border-rose-800 px-1 rounded font-bold whitespace-nowrap">🚫 선택불가 (${minDate}~)</span>`;
+            const tagText = (ticker === 'GGLL' || ticker === 'GOOGL') ? `🚫 구글 상장 2004.08~` : `🚫 선택불가 (${minDate}~)`;
+            backfillTag = `<span class="text-[9px] bg-rose-950 text-rose-300 border border-rose-800 px-1 rounded font-bold whitespace-nowrap">${tagText}</span>`;
           } else if (item.allowBackfill && currentStartMonth < inceptDate) {
             backfillTag = `<span class="text-[9px] bg-cyan-950 text-cyan-300 border border-cyan-800 px-1 rounded font-semibold whitespace-nowrap">지수백필 (상장:${inceptDate})</span>`;
           } else {
             backfillTag = `<span class="text-[9px] bg-emerald-950 text-emerald-300 border border-emerald-800 px-1 rounded font-semibold whitespace-nowrap">실제데이터 (상장:${inceptDate})</span>`;
           }
 
+          const unavailToast = (ticker === 'GGLL' || ticker === 'GOOGL')
+            ? `🚫 ${ticker}는 구글(알파벳) 상장일(2004년 8월) 이전 데이터가 존재하지 않아 현재 설정(${currentStartMonth})에서는 선택할 수 없습니다.`
+            : `🚫 ${ticker}는 ${minDate} 이전 데이터가 존재하지 않아 현재 설정(${currentStartMonth})에서는 선택할 수 없습니다.`;
+
           label.innerHTML = `
             <input type="checkbox" id="chk-${ticker}" value="${ticker}" ${isChecked ? 'checked' : ''} ${isUnavailable ? 'disabled' : ''} onchange="UIController.toggleTicker('${ticker}')" aria-label="${ticker} 선택" class="accent-emerald-500 disabled:opacity-30">
-            <div class="truncate w-full" onclick="${isUnavailable ? `ToastNotifier.show('🚫 ${ticker}는 ${minDate} 이후 데이터만 존재하여 현재 설정(${currentStartMonth})에서는 선택할 수 없습니다.', 'warning')` : ''}">
+            <div class="truncate w-full" onclick="${isUnavailable ? `ToastNotifier.show('${unavailToast}', 'warning')` : ''}">
               <div class="flex items-center justify-between gap-1">
                 <span class="font-bold ${isUnavailable ? 'text-slate-500 line-through' : 'text-slate-200'} whitespace-nowrap">${ticker}</span>
                 ${backfillTag}
@@ -3489,8 +3629,11 @@ class QuantBacktestEngine {
         const config = TICKER_UNIVERSE[ticker];
         const minDate = config?.backfillMinDate || config?.inceptDate;
 
-        if (config && !config.allowBackfill && currentStartMonth < minDate && !this.selectedTickers.includes(ticker)) {
-          ToastNotifier.show(`🚫 ${ticker}는 ${minDate} 이후 데이터만 존재하여 현재 설정(${currentStartMonth})에서는 선택할 수 없습니다.`, 'error');
+        if (config && currentStartMonth < minDate && !this.selectedTickers.includes(ticker)) {
+          const msg = (ticker === 'GGLL' || ticker === 'GOOGL')
+            ? `🚫 ${ticker}는 구글(알파벳) 상장일(2004년 8월) 이전 데이터가 존재하지 않아 현재 설정(${currentStartMonth})에서는 선택할 수 없습니다.`
+            : `🚫 ${ticker}는 ${minDate} 이전 데이터가 존재하지 않아 현재 설정(${currentStartMonth})에서는 선택할 수 없습니다.`;
+          ToastNotifier.show(msg, 'error');
           this.renderModalCheckboxes();
           return;
         }
@@ -3511,7 +3654,7 @@ class QuantBacktestEngine {
           this.selectedTickers = Object.keys(TICKER_UNIVERSE).filter(ticker => {
             const cfg = TICKER_UNIVERSE[ticker];
             const minDate = cfg?.backfillMinDate || cfg?.inceptDate;
-            return cfg?.allowBackfill || currentStartMonth >= minDate;
+            return currentStartMonth >= minDate;
           });
         } else {
           this.selectedTickers = [];
@@ -3521,7 +3664,7 @@ class QuantBacktestEngine {
       }
 
       static resetDefaults() {
-        this.selectedTickers = ['QQQ', 'GGLL', 'KOSPI'];
+        this.selectedTickers = ['QQQ', 'SPY', 'KOSPI'];
         this.updateActiveChips();
         this.renderModalCheckboxes();
       }
@@ -3609,7 +3752,7 @@ class QuantBacktestEngine {
           const hasInvalidTicker = tickers.some(t => {
             const cfg = TICKER_UNIVERSE[t];
             const minDate = cfg?.backfillMinDate || cfg?.inceptDate;
-            return cfg && !cfg.allowBackfill && startMonth < minDate;
+            return cfg && startMonth < minDate;
           });
 
           return !hasInvalidTicker;
@@ -3624,9 +3767,13 @@ class QuantBacktestEngine {
         const invalidAssets = [];
         this.selectedTickers.forEach(ticker => {
           const config = TICKER_UNIVERSE[ticker];
-          const minDate = config?.backfillMinDate || config?.inceptDate || '2000-01';
-          if (config && !config.allowBackfill && startMonth < minDate) {
-            invalidAssets.push({ ticker, minDate, reason: config.warningReason || '백필 불가' });
+          const minDate = config?.backfillMinDate || config?.inceptDate || '1985-01';
+          if (config && startMonth < minDate) {
+            const isGoogle = (ticker === 'GGLL' || ticker === 'GOOGL');
+            const reason = isGoogle 
+              ? '구글 상장일(2004년 8월) 이전 데이터 미존재' 
+              : (!config.allowBackfill ? (config.warningReason || '백필 미지원 종목') : `기초 지수/자산 데이터 제공 이전 (${minDate}~)`);
+            invalidAssets.push({ ticker, minDate, reason });
           }
         });
 
@@ -3873,43 +4020,49 @@ class QuantBacktestEngine {
         if (!firstTicker) return;
 
         const invCard = document.createElement('div');
-        invCard.className = 'bg-slate-900 p-3.5 sm:p-4 rounded-xl border border-slate-800 flex flex-col justify-between';
+        invCard.className = 'bg-slate-900 p-3.5 sm:p-4 rounded-xl border border-slate-800 flex flex-col justify-between hover:border-slate-700 transition shadow-sm';
         invCard.innerHTML = `
           <div>
-            <span class="text-xs text-slate-400 font-semibold block whitespace-nowrap">총 투입 원금 (Principal)</span>
+            <div class="flex items-center justify-between gap-1 mb-1">
+              <span class="text-xs text-slate-400 font-semibold block whitespace-nowrap">💵 총 투입 원금 (Principal)</span>
+              <span class="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-normal whitespace-nowrap">직접 모은 돈</span>
+            </div>
             <div class="text-lg sm:text-xl font-bold mt-1 text-slate-100 whitespace-nowrap">
               ${QuantUtils.formatKRW(results[firstTicker].investedKrw)}
             </div>
           </div>
-          <div class="text-[11px] text-slate-500 mt-2 whitespace-nowrap">
-            검증 기간: ${sortedDates[0]} ~ ${sortedDates[sortedDates.length - 1]}
+          <div class="text-[11px] text-slate-400 mt-2 whitespace-nowrap pt-2 border-t border-slate-800/80">
+            📅 분석 기간: <b class="text-slate-200">${sortedDates[0]} ~ ${sortedDates[sortedDates.length - 1]}</b>
           </div>
         `;
         cardFragment.appendChild(invCard);
 
         Object.entries(results).slice(0, 3).forEach(([ticker, res], idx) => {
           const card = document.createElement('div');
-          card.className = 'bg-slate-900 p-3.5 sm:p-4 rounded-xl border border-slate-800 flex flex-col justify-between';
           const isMix = ticker.startsWith('[MIX]');
           const score = res.score;
           const safeName = QuantUtils.escapeHTML(res.name);
+
+          card.className = `bg-slate-900 p-3.5 sm:p-4 rounded-xl border transition shadow-sm flex flex-col justify-between ${
+            isMix ? 'border-amber-500/40 hover:border-amber-400' : 'border-slate-800 hover:border-emerald-500/40'
+          }`;
 
           card.innerHTML = `
             <div>
               <div class="flex items-center justify-between gap-2 mb-1">
                 <span class="text-xs font-bold truncate ${isMix ? 'text-amber-400' : 'text-slate-200'}" title="${safeName}">${safeName}</span>
-                <span class="shrink-0 text-[10px] bg-amber-500/20 text-amber-300 font-bold px-1.5 py-0.5 rounded border border-amber-500/30 whitespace-nowrap">${score}점</span>
+                <span class="shrink-0 text-[10px] bg-amber-500/20 text-amber-300 font-bold px-1.5 py-0.5 rounded border border-amber-500/30 whitespace-nowrap">종합 ${score}점</span>
               </div>
               <div class="text-base sm:text-lg font-bold mt-1 flex items-baseline gap-1.5 flex-wrap whitespace-nowrap" style="color: ${isMix ? '#f59e0b' : palette[idx % palette.length]}">
                 <span>${QuantUtils.formatKRW(res.finalVal)}</span>
-                <span class="text-xs font-normal text-slate-300">(${res.cumulativeReturn >= 0 ? '+' : ''}${res.cumulativeReturn.toFixed(1)}%)</span>
+                <span class="text-xs font-semibold ${res.cumulativeReturn >= 0 ? 'text-emerald-400' : 'text-rose-400'}">(${res.cumulativeReturn >= 0 ? '+' : ''}${res.cumulativeReturn.toFixed(1)}%)</span>
               </div>
             </div>
             <div class="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] mt-3 pt-2.5 border-t border-slate-800">
-              <span class="text-cyan-400 font-semibold whitespace-nowrap">XIRR: ${res.annualizedXIRR >= 0 ? '+' : ''}${res.annualizedXIRR.toFixed(1)}%</span>
-              <span class="text-amber-400 font-semibold whitespace-nowrap">소티노: ${res.sortino.toFixed(2)}</span>
-              <span class="text-rose-400 font-semibold whitespace-nowrap">MDD: ${res.twrMdd.toFixed(1)}%</span>
-              <span class="text-rose-300 font-semibold whitespace-nowrap">Ulcer: ${res.ulcerIndex.toFixed(1)}</span>
+              <span class="text-cyan-400 font-semibold whitespace-nowrap" title="실질 연복리 수익률 (적립식 체감 이자율)">📈 XIRR: ${res.annualizedXIRR >= 0 ? '+' : ''}${res.annualizedXIRR.toFixed(1)}%</span>
+              <span class="text-amber-400 font-semibold whitespace-nowrap" title="하락장 방어 가성비 (1.0 이상 우수)">⚖️ 소티노: ${res.sortino.toFixed(2)}</span>
+              <span class="text-rose-400 font-semibold whitespace-nowrap" title="고점 대비 최대 하락폭">📉 MDD: ${res.twrMdd.toFixed(1)}%</span>
+              <span class="text-rose-300 font-semibold whitespace-nowrap" title="마음고생 지수 (낮을수록 편안함)">🩺 고통: ${res.ulcerIndex.toFixed(1)}</span>
             </div>
           `;
           cardFragment.appendChild(card);

@@ -1,43 +1,4 @@
-static applyPreset(presetKey) {
-        if (presetKey === 'popular_dca') {
-          document.getElementById('startMonth').value = '2004-01';
-          document.getElementById('investMode').value = 'dca';
-          document.getElementById('monthlyKrw').value = '500000';
-          this.selectedTickers = ['QQQ', 'SPY', 'KOSPI'];
-          ToastNotifier.show("🌟 '국민 적립식 (QQQ + SPY + 코스피)' 프리셋이 적용되었습니다.", "success");
-        } else if (presetKey === 'm7_allstar') {
-          document.getElementById('startMonth').value = '2004-08';
-          document.getElementById('investMode').value = 'dca';
-          document.getElementById('monthlyKrw').value = '500000';
-          this.selectedTickers = ['AAPL', 'MSFT', 'NVDA', 'GOOGL'];
-          ToastNotifier.show("👑 'M7 빅테크 올스타 (애플 + 마소 + 엔비디아 + 구글)' 프리셋이 적용되었습니다.", "success");
-        } else if (presetKey === 'kr_market_leaders') {
-          document.getElementById('startMonth').value = '2000-01';
-          document.getElementById('investMode').value = 'dca';
-          document.getElementById('monthlyKrw').value = '500000';
-          this.selectedTickers = ['005930.KS', '000660.KS', 'KOSPI'];
-          ToastNotifier.show("🇰🇷 '한국 시총 투톱 (삼성전자 + SK하이닉스 + 코스피)' 프리셋이 적용되었습니다.", "success");
-        } else if (presetKey === 'growth_leveraged') {
-          document.getElementById('startMonth').value = '2006-06';
-          document.getElementById('investMode').value = 'dca';
-          document.getElementById('monthlyKrw').value = '500000';
-          this.selectedTickers = ['QQQ', 'QLD'];
-          ToastNotifier.show("⚡ '나스닥 2배 공격형 (QQQ + QLD)' 프리셋이 적용되었습니다.", "success");
-        } else if (presetKey === 'all_weather') {
-          document.getElementById('startMonth').value = '2004-11';
-          document.getElementById('investMode').value = 'dca';
-          document.getElementById('monthlyKrw').value = '500000';
-          this.selectedTickers = ['SPY', 'TLT', 'GLD'];
-          ToastNotifier.show("🛡️ '올웨더 자산배분 (주식 + 장기채 + 금)' 프리셋이 적용되었습니다.", "success");
-        } else if (presetKey === 'lump_sum_50m') {
-          document.getElementById('startMonth').value = '2000-01';
-          document.getElementById('investMode').value = 'lumpSum';
-          document.getElementById('lumpSumKrw').value = '50000000';
-          this.selectedTickers = ['SPY', 'KOSPI'];
-          ToastNotifier.show("💰 '5천만원 목돈 거치식 (SPY + 코스피)' 프리셋이 적용되었습니다.", "success");
-        }
-
-        <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ko">
 <head>
   <meta charset="UTF-8">

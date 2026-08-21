@@ -706,9 +706,9 @@ const EMBEDDED_FF_FACTORS_1985_2026 = {"1985-01-02":[-0.0093,0.0074,0.0026,-0.00
       // ① 미국 대표 지수 & 배당 ETF
       'SPY':       { name: 'SPDR S&P 500 ETF Trust', category: 'index_etf', currency: 'USD', base: '^GSPC', leverage: 1, fee: 0.0009, inceptDate: '1993-01', allowBackfill: true, backfillMinDate: '1985-01', proxyType: 'index_tracking' },
       'QQQ':       { name: 'Invesco QQQ Trust (나스닥100)', category: 'index_etf', currency: 'USD', base: '^NDX', leverage: 1, fee: 0.0020, inceptDate: '1999-03', allowBackfill: true, backfillMinDate: '1985-10', proxyType: 'index_tracking' },
-      'VOO':       { name: 'Vanguard S&P 500 ETF', category: 'index_etf', currency: 'USD', base: '^GSPC', leverage: 1, fee: 0.0003, inceptDate: '2010-09', allowBackfill: true, backfillMinDate: '1985-01', proxyType: 'index_tracking' },
-      'VTI':       { name: 'Vanguard Total Stock Market', category: 'index_etf', currency: 'USD', base: '^GSPC', leverage: 1, fee: 0.0003, inceptDate: '2001-05', allowBackfill: true, backfillMinDate: '1985-01', proxyType: 'index_tracking' },
-      'QQQM':      { name: 'Invesco NASDAQ 100 ETF', category: 'index_etf', currency: 'USD', base: '^NDX', leverage: 1, fee: 0.0015, inceptDate: '2020-10', allowBackfill: true, backfillMinDate: '1985-10', proxyType: 'index_tracking' },
+      'VOO':       { name: 'Vanguard S&P 500 ETF (S&P500 저보수)', category: 'index_etf', currency: 'USD', base: 'SPY', leverage: 1, fee: 0.0003, inceptDate: '2010-09', allowBackfill: true, backfillMinDate: '1985-01', proxyType: 'index_tracking' },
+      'VTI':       { name: 'Vanguard Total Stock Market (미국전체)', category: 'index_etf', currency: 'USD', base: 'SPY', leverage: 1, fee: 0.0003, inceptDate: '2001-05', allowBackfill: true, backfillMinDate: '1985-01', proxyType: 'index_tracking' },
+      'QQQM':      { name: 'Invesco NASDAQ 100 ETF (나스닥100 저보수)', category: 'index_etf', currency: 'USD', base: 'QQQ', leverage: 1, fee: 0.0015, inceptDate: '2020-10', allowBackfill: true, backfillMinDate: '1985-10', proxyType: 'index_tracking' },
       'IWM':       { name: 'iShares Russell 2000 ETF (소형주)', category: 'index_etf', currency: 'USD', base: '^RUT', leverage: 1, fee: 0.0019, inceptDate: '2000-05', allowBackfill: true, backfillMinDate: '1987-01', proxyType: 'index_tracking' },
       'SCHD':      { name: 'Schwab U.S. Dividend Equity (슈드)', category: 'dividend_etf', currency: 'USD', base: null, leverage: 1, fee: 0.0006, inceptDate: '2011-10', allowBackfill: false, backfillMinDate: '2011-10', warningReason: '2011년 10월 상장', proxyType: 'unsupported' },
       'SPMO':      { name: 'Invesco S&P 500 Momentum', category: 'index_etf', currency: 'USD', base: 'SPY', leverage: 1, fee: 0.0013, inceptDate: '2017-10', allowBackfill: true, backfillMinDate: '1994-12', proxyType: 'official_embedded_index' },
@@ -733,16 +733,16 @@ const EMBEDDED_FF_FACTORS_1985_2026 = {"1985-01-02":[-0.0093,0.0074,0.0026,-0.00
       'GLD':       { name: 'SPDR Gold Shares (금 현물)', category: 'bond_commodity', currency: 'USD', base: 'GC=F', leverage: 1, fee: 0.0040, inceptDate: '2004-11', allowBackfill: true, backfillMinDate: '1985-01', proxyType: 'index_tracking' },
 
       // ④ 미국 메가캡 빅테크 TOP 11
-      'AAPL':      { name: '애플 (Apple)', category: 'us_top', currency: 'USD', base: null, leverage: 1, fee: 0.0000, inceptDate: '1980-12', allowBackfill: true, backfillMinDate: '1985-01', proxyType: 'direct' },
-      'MSFT':      { name: '마이크로소프트 (Microsoft)', category: 'us_top', currency: 'USD', base: null, leverage: 1, fee: 0.0000, inceptDate: '1986-03', allowBackfill: true, backfillMinDate: '1986-03', proxyType: 'direct' },
-      'NVDA':      { name: '엔비디아 (NVIDIA)', category: 'us_top', currency: 'USD', base: null, leverage: 1, fee: 0.0000, inceptDate: '1999-01', allowBackfill: true, backfillMinDate: '1999-01', proxyType: 'direct' },
+      'AAPL':      { name: '애플 (Apple)', category: 'us_top', currency: 'USD', base: null, leverage: 1, fee: 0.0000, inceptDate: '1980-12', allowBackfill: false, backfillMinDate: '1985-01', proxyType: 'direct' },
+      'MSFT':      { name: '마이크로소프트 (Microsoft)', category: 'us_top', currency: 'USD', base: null, leverage: 1, fee: 0.0000, inceptDate: '1986-03', allowBackfill: false, backfillMinDate: '1986-03', warningReason: '1986년 3월 상장', proxyType: 'direct' },
+      'NVDA':      { name: '엔비디아 (NVIDIA)', category: 'us_top', currency: 'USD', base: null, leverage: 1, fee: 0.0000, inceptDate: '1999-01', allowBackfill: false, backfillMinDate: '1999-01', warningReason: '1999년 1월 상장', proxyType: 'direct' },
       'GOOGL':     { name: '구글 (Alphabet A)', category: 'us_top', currency: 'USD', base: null, leverage: 1, fee: 0.0000, inceptDate: '2004-08', allowBackfill: false, backfillMinDate: '2004-08', warningReason: '2004년 8월 상장', proxyType: 'direct' },
-      'AMZN':      { name: '아마존 (Amazon)', category: 'us_top', currency: 'USD', base: null, leverage: 1, fee: 0.0000, inceptDate: '1997-05', allowBackfill: true, backfillMinDate: '1997-05', proxyType: 'direct' },
+      'AMZN':      { name: '아마존 (Amazon)', category: 'us_top', currency: 'USD', base: null, leverage: 1, fee: 0.0000, inceptDate: '1997-05', allowBackfill: false, backfillMinDate: '1997-05', warningReason: '1997년 5월 상장', proxyType: 'direct' },
       'META':      { name: '메타 (Meta Platforms)', category: 'us_top', currency: 'USD', base: null, leverage: 1, fee: 0.0000, inceptDate: '2012-05', allowBackfill: false, backfillMinDate: '2012-05', warningReason: '2012년 5월 상장', proxyType: 'direct' },
       'TSLA':      { name: '테슬라 (Tesla)', category: 'us_top', currency: 'USD', base: null, leverage: 1, fee: 0.0000, inceptDate: '2010-06', allowBackfill: false, backfillMinDate: '2010-06', warningReason: '2010년 6월 상장', proxyType: 'direct' },
-      'BRK-B':     { name: '버크셔해서웨이 (Berkshire B)', category: 'us_top', currency: 'USD', base: null, leverage: 1, fee: 0.0000, inceptDate: '1996-05', allowBackfill: true, backfillMinDate: '1996-05', proxyType: 'direct' },
-      'LLY':       { name: '일라이릴리 (Eli Lilly)', category: 'us_top', currency: 'USD', base: null, leverage: 1, fee: 0.0000, inceptDate: '1970-01', allowBackfill: true, backfillMinDate: '1985-01', proxyType: 'direct' },
-      'TSM':       { name: 'TSMC (대만반도체)', category: 'us_top', currency: 'USD', base: null, leverage: 1, fee: 0.0000, inceptDate: '1997-10', allowBackfill: true, backfillMinDate: '1997-10', proxyType: 'direct' },
+      'BRK-B':     { name: '버크셔해서웨이 (Berkshire B)', category: 'us_top', currency: 'USD', base: null, leverage: 1, fee: 0.0000, inceptDate: '1996-05', allowBackfill: false, backfillMinDate: '1996-05', warningReason: '1996년 5월 상장', proxyType: 'direct' },
+      'LLY':       { name: '일라이릴리 (Eli Lilly)', category: 'us_top', currency: 'USD', base: null, leverage: 1, fee: 0.0000, inceptDate: '1970-01', allowBackfill: false, backfillMinDate: '1985-01', proxyType: 'direct' },
+      'TSM':       { name: 'TSMC (대만반도체)', category: 'us_top', currency: 'USD', base: null, leverage: 1, fee: 0.0000, inceptDate: '1997-10', allowBackfill: false, backfillMinDate: '1997-10', warningReason: '1997년 10월 상장', proxyType: 'direct' },
       'AVGO':      { name: '브로드컴 (Broadcom)', category: 'us_top', currency: 'USD', base: null, leverage: 1, fee: 0.0000, inceptDate: '2009-08', allowBackfill: false, backfillMinDate: '2009-08', warningReason: '2009년 8월 상장', proxyType: 'direct' },
 
       // ⑤ 한국 대표 KOSPI 지수 & 시총 TOP 10 (KRW)
@@ -1501,8 +1501,14 @@ class MultiFactorSynthesisEngine {
           const baseCurr = basePrices[i + 1];
           const basePrev = basePrices[i];
 
-          if (config.proxyType === 'leveraged' && baseDivs && baseDivs.has(dateStr) && !divMap.has(dateStr)) {
-            divMap.set(dateStr, 0.0);
+          // 배당 승계 (Base ETF가 배당을 지급하는 경우, 신생 ETF도 배당 수익률 승계)
+          if (baseDivs && baseDivs.has(dateStr) && !divMap.has(dateStr)) {
+            if (config.proxyType === 'leveraged') {
+              divMap.set(dateStr, 0.0);
+            } else if (basePrices[i] > 0) {
+              const divYield = baseDivs.get(dateStr) / basePrices[i];
+              divMap.set(dateStr, priceArr[i + 1] * divYield);
+            }
           }
 
           if (baseCurr > 0 && basePrev > 0) {
@@ -1538,24 +1544,30 @@ class MultiFactorSynthesisEngine {
 
               let repoCostDaily = 0.0;
               if (lev > 0) {
-                // 롱 레버리지: (lev - 1) 배율 자금 차입 이자
                 repoCostDaily = ((lev - 1) * (sofr + swapSpread)) / 252.0;
               } else {
-                // 숏(인버스) 레버리지: 담보 현금 SOFR 이자 수취 - 주식 대차 수수료 (연 1.5% 대차 수수료 적용)
                 const shortBorrowFee = 0.015;
                 const cashInterestEarned = (Math.abs(lev) + 1) * sofr;
                 const borrowFeePaid = Math.abs(lev) * shortBorrowFee;
                 repoCostDaily = -(cashInterestEarned - borrowFeePaid) / 252.0;
               }
 
-              const expenseDaily = (config.fee + trackingErr) / 252.0;
+              const baseConfig = TICKER_UNIVERSE[config.base];
+              const baseFee = baseConfig?.fee || 0.0;
+              const netExpenseDaily = (config.fee - (lev * baseFee) + trackingErr) / 252.0;
 
-              synthSimpleReturn = (lev * simpleBaseReturn) - repoCostDaily - expenseDaily;
+              synthSimpleReturn = (lev * simpleBaseReturn) - repoCostDaily - netExpenseDaily;
               synthSimpleReturn = Math.max(-0.999, synthSimpleReturn);
             } 
             else {
               const simpleBaseReturn = (baseCurr - basePrev) / basePrev;
-              synthSimpleReturn = simpleBaseReturn - (config.fee / 252.0);
+              const baseConfig = TICKER_UNIVERSE[config.base];
+              let feeDiff = config.fee;
+              if (baseConfig && baseConfig.fee !== undefined) {
+                // Base ETF가 이미 수수료를 차감한 상태이므로, 두 ETF 간의 수수료 차이만 정산 (예: QQQM 0.15% - QQQ 0.20% = -0.05%p -> +0.05%p 추가 이득)
+                feeDiff = config.fee - baseConfig.fee;
+              }
+              synthSimpleReturn = simpleBaseReturn - (feeDiff / 252.0);
             }
 
             const prevPrice = priceArr[i + 1] / (1.0 + synthSimpleReturn);

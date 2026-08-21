@@ -995,7 +995,7 @@ class KennethFrenchFetcher {
         }
       }
 
-      if (factorMap.size >= 120) {
+      if (factorMap.size > 0) {
         return factorMap;
       }
     }
@@ -1701,7 +1701,7 @@ class MultiFactorSynthesisEngine {
     }
 
     class FamaFrenchEngine {
-      static MIN_OBSERVATIONS = 120;
+      static MIN_OBSERVATIONS = 30;
 
       static buildDailyReturnMap(ticker, processedData, dates) {
         const priceArr = processedData.processedPrices[ticker];
@@ -1723,7 +1723,7 @@ class MultiFactorSynthesisEngine {
       static solve(portDailyReturns, processedData, dates, ffOfficialMap) {
         const N = portDailyReturns.length;
         if (N < this.MIN_OBSERVATIONS) {
-          return this.getEmptyResult("관측치 부족 (최소 120거래일 필요)");
+          return this.getEmptyResult("관측치 부족 (최소 30거래일 필요)");
         }
 
         const portReturnMap = new Map();
@@ -1735,25 +1735,53 @@ class MultiFactorSynthesisEngine {
         const isOfficialAvailable = ffOfficialMap && ffOfficialMap.size >= this.MIN_OBSERVATIONS;
 
         if (isOfficialAvailable) {
-          const X = [];
-          const Y = [];
+          const spyReturns  = this.buildDailyReturnMap('SPY', processedData, dates);
+          const spmoReturns = this.buildDailyReturnMap('SPMO', processedData, dates);
+
+          const X_6f = [];
+          const Y_6f = [];
+          const X_5f = [];
+          const Y_5f = [];
+
+          let hasValidMom = false;
 
           for (const [dateStr, rPort] of portReturnMap.entries()) {
             const factor = ffOfficialMap.get(dateStr);
             if (!factor) continue;
 
-            X.push([1.0, factor.mktRf, factor.smb, factor.hml, factor.rmw || 0, factor.cma || 0, factor.mom || 0]);
-            Y.push(rPort - factor.rf);
+            let momVal = factor.mom;
+            if ((momVal === undefined || momVal === 0.0) && spmoReturns.has(dateStr) && spyReturns.has(dateStr)) {
+              momVal = spmoReturns.get(dateStr) - spyReturns.get(dateStr);
+            }
+
+            if (momVal !== undefined && Math.abs(momVal) > 1e-8) {
+              hasValidMom = true;
+              X_6f.push([1.0, factor.mktRf, factor.smb, factor.hml, factor.rmw || 0, factor.cma || 0, momVal]);
+              Y_6f.push(rPort - factor.rf);
+            }
+
+            X_5f.push([1.0, factor.mktRf, factor.smb, factor.hml, factor.rmw || 0, factor.cma || 0]);
+            Y_5f.push(rPort - factor.rf);
           }
 
-          if (X.length >= this.MIN_OBSERVATIONS) {
-            const res = this.runOLSWithHAC(X, Y, "FF5_MOM_6F", "Kenneth French FF5 + MOM (GitHub Mirror)", [
+          // ① FF5 + MOM 6-Factor 모델 회귀 시도
+          if (hasValidMom && X_6f.length >= this.MIN_OBSERVATIONS) {
+            const res6 = this.runOLSWithHAC(X_6f, Y_6f, "FF5_MOM_6F", "Kenneth French FF5 + MOM 6F", [
               'Alpha', 'MKT-RF', 'SMB', 'HML', 'RMW', 'CMA', 'MOM'
             ]);
-            if (res) return res;
+            if (res6) return res6;
+          }
+
+          // ② FF5 공식 5-Factor 모델 회귀 (RMW, CMA 공식 산출)
+          if (X_5f.length >= this.MIN_OBSERVATIONS) {
+            const res5 = this.runOLSWithHAC(X_5f, Y_5f, "FF5_5F", "Kenneth French FF5 (공식 5요인)", [
+              'Alpha', 'MKT-RF', 'SMB', 'HML', 'RMW', 'CMA'
+            ]);
+            if (res5) return res5;
           }
         }
 
+        // ③ Fallback: ETF Proxy 4-Factor 모델
         const spyReturns  = this.buildDailyReturnMap('SPY', processedData, dates);
         const iwmReturns  = this.buildDailyReturnMap('IWM', processedData, dates);
         const schdReturns = this.buildDailyReturnMap('SCHD', processedData, dates);
@@ -1788,7 +1816,7 @@ class MultiFactorSynthesisEngine {
           return this.getEmptyResult("Proxy 관측치 부족");
         }
 
-        const resProxy = this.runOLSWithHAC(X_proxy, Y_proxy, "PROXY_4F", "ETF Proxy Carhart-like (4-Factor)", [
+        const resProxy = this.runOLSWithHAC(X_proxy, Y_proxy, "PROXY_4F", "ETF Proxy Carhart (4-Factor)", [
           'Alpha', 'Proxy MKT', 'Proxy Small-Cap', 'Dividend/Value Proxy', 'Proxy Momentum'
         ]);
 
@@ -4234,7 +4262,7 @@ class QuantBacktestEngine {
           const tr = document.createElement('tr');
           const isMix = ticker.startsWith('[MIX]');
           const ff = res.ff;
-          const isOfficial = ff.modelType === "FF5_MOM_6F";
+          const isOfficial = ff.modelType === "FF5_MOM_6F" || ff.modelType === "FF5_5F";
 
           tr.className = `hover:bg-slate-800/40 border-b border-slate-800/60 ${isMix ? 'bg-amber-950/20' : ''}`;
 
@@ -4259,8 +4287,8 @@ class QuantBacktestEngine {
             <td class="px-3 py-2.5 text-emerald-400 font-semibold whitespace-nowrap">${fmt(details['SMB'] || details['Proxy Small-Cap'])}</td>
             <td class="px-3 py-2.5 text-amber-400 font-semibold whitespace-nowrap">${fmt(details['HML'] || details['Dividend/Value Proxy'])}</td>
             <td class="px-3 py-2.5 text-cyan-400 font-semibold whitespace-nowrap">${fmt(details['MOM'] || details['Proxy Momentum'])}</td>
-            <td class="px-3 py-2.5 text-indigo-400 font-semibold whitespace-nowrap">${isOfficial ? fmt(details['RMW']) : '-'}</td>
-            <td class="px-3 py-2.5 text-rose-400 font-semibold whitespace-nowrap">${isOfficial ? fmt(details['CMA']) : '-'}</td>
+            <td class="px-3 py-2.5 text-indigo-400 font-semibold whitespace-nowrap">${fmt(details['RMW'])}</td>
+            <td class="px-3 py-2.5 text-rose-400 font-semibold whitespace-nowrap">${fmt(details['CMA'])}</td>
             <td class="px-3 py-2.5 text-slate-400 whitespace-nowrap" title="F-Stat: ${ff.fStat.toFixed(2)} | HAC Lag: ${ff.hacLag}">
               ${ff.rSquared.toFixed(2)} <span class="text-[10px] text-slate-500">(Adj: ${ff.adjRSquared.toFixed(2)})</span>
             </td>

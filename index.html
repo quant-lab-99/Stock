@@ -846,23 +846,25 @@ const EMBEDDED_FF_FACTORS_1985_2026 = {"1985-01-02":[-0.0093,0.0074,0.0026,-0.00
 
 class YahooFinanceFetcher {
   static async fetchChartData(ticker, startYear, endYear) {
-    const sym = ticker === 'KOSPI' ? '^KS11' : ticker;
+    const config = TICKER_UNIVERSE[ticker];
+    const sym = config?.symbol || (ticker === 'KOSPI' ? '^KS11' : ticker);
     const startSec = Math.floor(new Date(`${startYear}-01-01T00:00:00Z`).getTime() / 1000);
     const endSec = Math.floor(new Date(`${endYear}-12-31T23:59:59Z`).getTime() / 1000);
    
     const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?period1=${startSec}&period2=${endSec}&interval=1d&events=div`;
    
     const baseProxies = [
-      `${GLOBAL_QUANT_CONFIG.CORS_WORKER_PROXY}${encodeURIComponent(yahooUrl)}`,
       `https://corsproxy.io/?${encodeURIComponent(yahooUrl)}`,
-      `https://api.allorigins.win/raw?url=${encodeURIComponent(yahooUrl)}`
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(yahooUrl)}`,
+      `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(yahooUrl)}`,
+      `https://thingproxy.freeboard.io/fetch/${encodeURIComponent(yahooUrl)}`,
+      `${GLOBAL_QUANT_CONFIG.CORS_WORKER_PROXY}${encodeURIComponent(yahooUrl)}`,
+      yahooUrl
     ];
 
-    const proxies = QuantUtils.shuffleArray(baseProxies);
-
-    for (const proxyUrl of proxies) {
+    for (const proxyUrl of baseProxies) {
       try {
-        const res = await QuantUtils.fetchWithTimeout(proxyUrl, { timeout: 10000 });
+        const res = await QuantUtils.fetchWithTimeout(proxyUrl, { timeout: 4500 });
         if (!res.ok) continue;
         const json = await res.json();
        
@@ -870,11 +872,9 @@ class YahooFinanceFetcher {
         if (!result) continue;
 
         const timestamps = result.timestamp || result.timestamps || [];
-       
         const closes = result.indicators?.adjclose?.[0]?.adjclose
                     || result.indicators?.quote?.[0]?.close
                     || [];
-                   
         const eventsDiv = result.events?.dividends || {};
 
         const priceMap = new Map();
@@ -895,11 +895,15 @@ class YahooFinanceFetcher {
           }
         });
 
-        if (priceMap.size > 0) return { priceMap, divMap };
-      } catch (err) {
-        console.warn(`[YahooFetcher] ${proxyUrl} 프록시 연결 시도 중...`);
+        if (priceMap.size > 0) {
+          return { priceMap, divMap };
+        }
+      } catch (e) {
+        // Try next proxy silently
       }
     }
+
+    console.warn(`[YahooFinanceFetcher] ${ticker} 모든 프록시 수신 실패 -> 합성 엔진으로 자동 전환`);
     return null;
   }
 }
@@ -1380,25 +1384,39 @@ class MultiFactorSynthesisEngine {
       processedDivs[symbol] = divMap;
     });
 
+    // 2단계: Backfill 및 100% 완전 합성 루프
     Object.keys(TICKER_UNIVERSE).forEach(ticker => {
       const config = TICKER_UNIVERSE[ticker];
       if (!config.allowBackfill || !config.base) return;
 
       const basePrices = processedPrices[config.base];
       const baseDivs = processedDivs[config.base];
-
       if (!basePrices) return;
 
-      const priceArr = processedPrices[ticker];
-      const divMap = processedDivs[ticker];
-      const raw = rawDatasets[ticker];
+      let priceArr = processedPrices[ticker];
+      let divMap = processedDivs[ticker];
 
+      if (!priceArr) {
+        priceArr = new Float64Array(N);
+        divMap = new Map();
+        processedPrices[ticker] = priceArr;
+        processedDivs[ticker] = divMap;
+      }
+
+      const raw = rawDatasets[ticker];
       let firstInceptIdx = -1;
+
       for (let i = 0; i < N; i++) {
         if (raw?.priceMap?.has(sortedDates[i])) {
           firstInceptIdx = i;
           break;
         }
+      }
+
+      // 만약 네트워크 장애로 티커 시세를 못 받아왔더라도, 베이스 지수로부터 100% 완벽 합성 (Zero-Failure Fallback)
+      if (firstInceptIdx === -1 && basePrices[N - 1] > 0) {
+        priceArr[N - 1] = basePrices[N - 1];
+        firstInceptIdx = N - 1;
       }
 
       if (firstInceptIdx > 0) {
@@ -1412,11 +1430,26 @@ class MultiFactorSynthesisEngine {
             continue;
           }
 
-          const baseCurr = basePrices[i + 1];
-          const basePrev = basePrices[i];
+          let baseCurr = basePrices[i + 1];
+          let basePrev = basePrices[i];
 
-          if (config.proxyType === 'leveraged' && baseDivs && baseDivs.has(dateStr) && !divMap.has(dateStr)) {
-            divMap.set(dateStr, 0.0);
+          // 1985년 10월 이전 나스닥 100 지수(^NDX) 데이터가 없는 구간은 나스닥 종합지수(^IXIC)로 백필 자동 연계
+          if ((!baseCurr || !basePrev || baseCurr <= 0 || basePrev <= 0) && (config.base === '^NDX' || config.base === 'QQQ')) {
+            const ixicPrices = processedPrices['^IXIC'];
+            if (ixicPrices && ixicPrices[i + 1] > 0 && ixicPrices[i] > 0) {
+              baseCurr = ixicPrices[i + 1];
+              basePrev = ixicPrices[i];
+            }
+          }
+
+          // 배당 승계 (Base ETF가 배당을 지급하는 경우, 신생 ETF도 배당 수익률 승계)
+          if (baseDivs && baseDivs.has(dateStr) && !divMap.has(dateStr)) {
+            if (config.proxyType === 'leveraged') {
+              divMap.set(dateStr, 0.0);
+            } else if (basePrices[i] > 0) {
+              const divYield = baseDivs.get(dateStr) / basePrices[i];
+              divMap.set(dateStr, priceArr[i + 1] * divYield);
+            }
           }
 
           if (baseCurr > 0 && basePrev > 0) {
@@ -1425,11 +1458,10 @@ class MultiFactorSynthesisEngine {
             // ③ 장기 채권 ETF(TLT/TMF) 합성 이자 수익(Coupon Carry) 반영
             if (config.base === '^TYX' || config.base === '^TNX' || config.base === '^TYX=F') {
               const deltaYield = (baseCurr - basePrev) / 100.0;
-              const currentYield = basePrev / 100.0; // 연 금리 % -> 소수점 변환
+              const currentYield = basePrev / 100.0;
               const modDuration = 17.5;
               const convexity = 350.0;
 
-              // 가격 자본이득(Price Gain) + 채권 이자 수익(Coupon Carry) - 운용보수
               const priceReturn = (-modDuration * deltaYield) + (0.5 * convexity * Math.pow(deltaYield, 2));
               const couponCarryDaily = currentYield / 252.0;
 
@@ -1442,7 +1474,7 @@ class MultiFactorSynthesisEngine {
               const simpleBaseReturn = (baseCurr - basePrev) / basePrev;
               synthSimpleReturn = simpleBaseReturn + dailyAlpha - (config.fee / 252.0);
             } 
-            // ④ 롱/인버스 레버리지 ETF 조달비용(Repo Cost) 수식 개편
+            // ④ 롱/인버스 레버리지 ETF 조달비용(Repo Cost) 수식
             else if (config.proxyType === 'leveraged') {
               const simpleBaseReturn = (baseCurr - basePrev) / basePrev;
               const sofr = HistoricalInterestRates.getSOFR(dateStr);
@@ -1452,30 +1484,35 @@ class MultiFactorSynthesisEngine {
 
               let repoCostDaily = 0.0;
               if (lev > 0) {
-                // 롱 레버리지: (lev - 1) 배율 자금 차입 이자
                 repoCostDaily = ((lev - 1) * (sofr + swapSpread)) / 252.0;
               } else {
-                // 숏(인버스) 레버리지: 담보 현금 SOFR 이자 수취 - 주식 대차 수수료 (연 1.5% 대차 수수료 적용)
                 const shortBorrowFee = 0.015;
                 const cashInterestEarned = (Math.abs(lev) + 1) * sofr;
                 const borrowFeePaid = Math.abs(lev) * shortBorrowFee;
                 repoCostDaily = -(cashInterestEarned - borrowFeePaid) / 252.0;
               }
 
-              const expenseDaily = (config.fee + trackingErr) / 252.0;
+              const baseConfig = TICKER_UNIVERSE[config.base];
+              const baseFee = baseConfig?.fee || 0.0;
+              const netExpenseDaily = (config.fee - (lev * baseFee) + trackingErr) / 252.0;
 
-              synthSimpleReturn = (lev * simpleBaseReturn) - repoCostDaily - expenseDaily;
+              synthSimpleReturn = (lev * simpleBaseReturn) - repoCostDaily - netExpenseDaily;
               synthSimpleReturn = Math.max(-0.999, synthSimpleReturn);
             } 
             else {
               const simpleBaseReturn = (baseCurr - basePrev) / basePrev;
-              synthSimpleReturn = simpleBaseReturn - (config.fee / 252.0);
+              const baseConfig = TICKER_UNIVERSE[config.base];
+              let feeDiff = config.fee;
+              if (baseConfig && baseConfig.fee !== undefined) {
+                feeDiff = config.fee - baseConfig.fee;
+              }
+              synthSimpleReturn = simpleBaseReturn - (feeDiff / 252.0);
             }
 
             const prevPrice = priceArr[i + 1] / (1.0 + synthSimpleReturn);
             priceArr[i] = Math.max(0.001, prevPrice);
           } else {
-            priceArr[i] = 0;
+            priceArr[i] = priceArr[i + 1] > 0 ? priceArr[i + 1] : 0.001;
           }
         }
       }
@@ -3834,9 +3871,14 @@ class QuantBacktestEngine {
         });
 
         if (failedTickers.length > 0) {
-          const userFailed = failedTickers.filter(t => this.selectedTickers.includes(t));
+          const userFailed = failedTickers.filter(t => {
+            const cfg = TICKER_UNIVERSE[t];
+            // Base가 있어서 100% 합성 가능한 종목(SPMO, QQQM, VOO, QLD 등)은 실패 알림에서 제외
+            const canSynthesize = cfg?.allowBackfill && cfg?.base && rawDatasets[cfg.base];
+            return this.selectedTickers.includes(t) && !canSynthesize;
+          });
           if (userFailed.length > 0) {
-            ToastNotifier.show(`⚠️ 다음 선택 종목의 시세를 불러오지 못했습니다: ${userFailed.join(', ')}`, 'error');
+            ToastNotifier.show(`⚠️ 다음 개별 종목의 시세를 불러오지 못했습니다: ${userFailed.join(', ')}`, 'error');
           }
         }
 

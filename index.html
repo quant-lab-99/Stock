@@ -748,15 +748,35 @@ const EMBEDDED_FF_FACTORS_1985_2026 = {"1985-01-02":[-0.0093,0.0074,0.0026,-0.00
     }
 
     /* Polygon.io / Finnhub / CORS 다중 백업 페처 */
-    class MarketDataFetcher {
+        class MarketDataFetcher {
       static async fetchChartData(ticker, startYear, endYear) {
-        const cacheKey = `${ticker}_${startYear}_${endYear}_v15_1`;
+        const cacheKey = `${ticker}_${startYear}_${endYear}_v15_2`;
         const cached = await QuantDataCache.get(cacheKey);
         if (cached) {
           return {
             priceMap: new Map(cached.priceMapEntries),
             divMap: new Map(cached.divMapEntries)
           };
+        }
+
+        // ① 로컬 Direct-API 서버(/api/chart) 우선 호출 (0ms, 100% 무결성)
+        try {
+          const localUrl = `/api/chart?ticker=${encodeURIComponent(ticker)}&startYear=${startYear}&endYear=${endYear}`;
+          const res = await QuantUtils.fetchWithTimeout(localUrl, { timeout: 4000 });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.status === 'ok' && data.priceMap && Object.keys(data.priceMap).length > 0) {
+              const priceMap = new Map(Object.entries(data.priceMap));
+              const divMap = new Map(Object.entries(data.divMap || {}));
+              await QuantDataCache.set(cacheKey, {
+                priceMapEntries: Array.from(priceMap.entries()),
+                divMapEntries: Array.from(divMap.entries())
+              });
+              return { priceMap, divMap };
+            }
+          }
+        } catch (e) {
+          // 로컬 API 서버 없을 시 외부 API 및 프록시로 자동 Fallback
         }
 
         const provider = document.getElementById('apiProvider')?.value || 'polygon';

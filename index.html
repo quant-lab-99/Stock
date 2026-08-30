@@ -1763,47 +1763,43 @@ class MultiFactorSynthesisEngine {
       }
     }
 
-        class FamaFrenchEngine {
+    class FamaFrenchEngine {
       static solve(portDailyReturns, processedData, dates, ffOfficialMap) {
         const N = portDailyReturns.length;
         if (N < 30) return this.getEmptyResult("관측치 부족");
 
         const isOfficialAvailable = ffOfficialMap && ffOfficialMap.size > 0;
-        const X_5f = [];
-        const Y_5f = [];
+        const X_4f = [];
+        const Y_4f = [];
 
         const spyPrices = processedData.processedPrices['SPY'];
         const iwmPrices = processedData.processedPrices['IWM'];
         const schdPrices = processedData.processedPrices['SCHD'];
         const spmoPrices = processedData.processedPrices['SPMO'];
-        const xlkPrices = processedData.processedPrices['XLK'];
 
         for (let i = 0; i < N; i++) {
           const dateStr = dates[i + 1];
           const rfDaily = HistoricalInterestRates.getSOFR(dateStr) / 252;
           const official = isOfficialAvailable ? ffOfficialMap.get(dateStr) : null;
 
-          if (official) {
-            X_5f.push([1.0, official.mktRf, official.smb, official.hml, official.rmw || 0, official.cma || 0]);
-            Y_5f.push(portDailyReturns[i] - official.rf);
-          } else {
-            const rMkt = spyPrices && spyPrices[i] > 0 ? (spyPrices[i + 1] - spyPrices[i]) / spyPrices[i] : 0;
-            const rIwm = iwmPrices && iwmPrices[i] > 0 ? (iwmPrices[i + 1] - iwmPrices[i]) / iwmPrices[i] : rMkt;
-            const rSchd = schdPrices && schdPrices[i] > 0 ? (schdPrices[i + 1] - schdPrices[i]) / schdPrices[i] : rMkt;
+          const rMkt = spyPrices && spyPrices[i] > 0 ? (spyPrices[i + 1] - spyPrices[i]) / spyPrices[i] : 0;
+          const rIwm = iwmPrices && iwmPrices[i] > 0 ? (iwmPrices[i + 1] - iwmPrices[i]) / iwmPrices[i] : rMkt;
+          const rSchd = schdPrices && schdPrices[i] > 0 ? (schdPrices[i + 1] - schdPrices[i]) / schdPrices[i] : rMkt;
+          const rSpmo = spmoPrices && spmoPrices[i] > 0 ? (spmoPrices[i + 1] - spmoPrices[i]) / spmoPrices[i] : rMkt;
 
-            const mktRf = rMkt - rfDaily;
-            const smb = rIwm - rMkt;
-            const hml = rSchd - rMkt;
-            X_5f.push([1.0, mktRf, smb, hml, 0, 0]);
-            Y_5f.push(portDailyReturns[i] - rfDaily);
-          }
+          const mktRf = official ? official.mktRf : (rMkt - rfDaily);
+          const smb = official ? official.smb : (rIwm - rMkt);
+          const hml = official ? official.hml : (rSchd - rMkt);
+          const mom = official && official.mom !== 0.0 ? official.mom : (rSpmo - rMkt);
+          const rf = official ? official.rf : rfDaily;
+
+          X_4f.push([1.0, mktRf, smb, hml, mom]);
+          Y_4f.push(portDailyReturns[i] - rf);
         }
 
-        const factorNames = isOfficialAvailable 
-          ? ['Alpha', 'MKT-RF', 'SMB', 'HML', 'RMW', 'CMA']
-          : ['Alpha', 'Proxy MKT', 'Proxy Small-Cap', 'Dividend/Value Proxy', 'RMW', 'CMA'];
+        const factorNames = ['Alpha', 'MKT-RF', 'SMB', 'HML', 'MOM'];
 
-        const res = this.runOLSWithHAC(X_5f, Y_5f, isOfficialAvailable ? "FF5_5F" : "PROXY_4F", isOfficialAvailable ? "Kenneth French FF5 (공식 5요인)" : "ETF Proxy Model", factorNames);
+        const res = this.runOLSWithHAC(X_4f, Y_4f, isOfficialAvailable ? "CARHART_4F" : "PROXY_4F", isOfficialAvailable ? "Carhart 4-Factor (Fama-French + Momentum)" : "ETF Proxy Model", factorNames);
         return res || this.getEmptyResult("회귀 오차");
       }
 
@@ -1851,13 +1847,13 @@ class MultiFactorSynthesisEngine {
         return {
           modelType,
           modelLabel,
-          alpha: factorDetails['Alpha']?.beta || (beta[0] * 252 * 100.0),
-          bMkt: factorDetails['MKT-RF']?.beta || factorDetails['Proxy MKT']?.beta || beta[1],
-          bSmb: factorDetails['SMB']?.beta || factorDetails['Proxy Small-Cap']?.beta || beta[2],
-          bHml: factorDetails['HML']?.beta || factorDetails['Dividend/Value Proxy']?.beta || beta[3],
-          bRmw: factorDetails['RMW']?.beta || beta[4] || 0,
-          bCma: factorDetails['CMA']?.beta || beta[5] || 0,
-          bMom: 0,
+          alpha: factorDetails['Alpha']?.beta !== undefined ? factorDetails['Alpha'].beta : (beta[0] * 252 * 100.0),
+          bMkt: factorDetails['MKT-RF']?.beta ?? beta[1] ?? 1.0,
+          bSmb: factorDetails['SMB']?.beta ?? beta[2] ?? 0.0,
+          bHml: factorDetails['HML']?.beta ?? beta[3] ?? 0.0,
+          bMom: factorDetails['MOM']?.beta ?? beta[4] ?? 0.0,
+          bRmw: 0,
+          bCma: 0,
           rSquared,
           factorDetails
         };

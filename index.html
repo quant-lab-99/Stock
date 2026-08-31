@@ -146,6 +146,9 @@ const EMBEDDED_FF_FACTORS_1985_2026 = {"1985-01-02":[-0.0093,0.0074,0.0026,-0.00
           <button onclick="UIController.setPeriodPreset('2000')" class="bg-slate-800/90 hover:bg-slate-700 hover:text-amber-300 text-slate-300 text-[11px] px-2.5 py-1 rounded-lg border border-slate-700 transition font-medium whitespace-nowrap">2000 닷컴버블</button>
           <button onclick="UIController.setPeriodPreset('2008')" class="bg-slate-800/90 hover:bg-slate-700 hover:text-amber-300 text-slate-300 text-[11px] px-2.5 py-1 rounded-lg border border-slate-700 transition font-medium whitespace-nowrap">2008 금융위기</button>
           <button onclick="UIController.setPeriodPreset('all')" class="bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 text-[11px] px-2.5 py-1 rounded-lg border border-emerald-700/60 transition font-bold whitespace-nowrap">1985 전체</button>
+          <button onclick="UIController.openAIOptimizerModal()" class="bg-gradient-to-r from-amber-500 via-emerald-500 to-cyan-500 hover:from-amber-400 hover:to-cyan-400 text-slate-950 text-[11px] px-3 py-1 rounded-lg font-bold transition whitespace-nowrap shadow-md flex items-center gap-1 active:scale-95 ml-auto">
+            ⚡ AI 기간 최고조합 탐색
+          </button>
         </div>
       </div>
 
@@ -262,6 +265,9 @@ const EMBEDDED_FF_FACTORS_1985_2026 = {"1985-01-02":[-0.0093,0.0074,0.0026,-0.00
           <p class="text-[11px] text-slate-400 mt-0.5">원하는 종목 비율을 조합하고 파일(JSON)로 저장하거나 리더보드에 공유해보세요.</p>
         </div>
         <div class="flex gap-1.5 flex-wrap">
+          <button onclick="UIController.openAIOptimizerModal()" aria-label="현재 기간 최고점수 조합 자동 탐색" class="bg-gradient-to-r from-amber-500 via-emerald-500 to-cyan-500 hover:from-amber-400 hover:to-cyan-400 text-slate-950 font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 whitespace-nowrap shadow-md active:scale-95">
+            ⚡ AI 최고점수 조합 자동 탐색
+          </button>
           <button onclick="UIController.exportStrategies()" aria-label="전략 파일 저장" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-2.5 py-1.5 rounded border border-slate-700 transition whitespace-nowrap">
             📥 파일 저장
           </button>
@@ -375,6 +381,57 @@ const EMBEDDED_FF_FACTORS_1985_2026 = {"1985-01-02":[-0.0093,0.0074,0.0026,-0.00
       </div>
     </div>
 
+    <!-- AI 최적 포트폴리오 탐색기 모달 -->
+    <div id="aiOptimizerModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3">
+      <div class="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-fadeIn">
+        <div class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-base">🤖</span>
+              <h3 class="font-bold text-sm text-emerald-400 whitespace-nowrap">AI 기간별 최적 포트폴리오 자동 탐색</h3>
+              <span class="text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-800 px-2 py-0.5 rounded font-bold whitespace-nowrap">1초 전수조사</span>
+            </div>
+            <p class="text-xs text-slate-400 mt-1" id="aiOptimizerSubtitle">선택된 기간의 실제 데이터를 기반으로 최고 성과 조합을 분석 중입니다...</p>
+          </div>
+          <button onclick="UIController.closeAIOptimizerModal()" aria-label="모달 닫기" class="text-slate-400 hover:text-slate-100 text-xl font-bold px-2">&times;</button>
+        </div>
+
+        <div class="p-4 overflow-y-auto space-y-4 text-xs">
+          <!-- 필터 및 설정 바 -->
+          <div class="flex items-center justify-between flex-wrap gap-2 bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-xs">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-slate-400 font-medium">탐색 대상:</span>
+              <select id="aiOptUniverseSelect" onchange="UIController.runAIOptimizer()" class="bg-slate-900 text-emerald-400 font-bold rounded border border-slate-700 px-2.5 py-1 text-xs">
+                <option value="all" selected>🌟 전체 50개 ETF 및 글로벌 주식 전수 탐색 (기본값)</option>
+                <option value="etf_only">🏛️ ETF 전용 유니버스 (지수/섹터/배당/채권/금)</option>
+                <option value="stocks_only">💻 개별 주식 유니버스 (미국 빅테크 + 한국 대표주)</option>
+                <option value="selected">📋 현재 체크박스 선택된 자산들만</option>
+              </select>
+            </div>
+            <button onclick="UIController.runAIOptimizer()" class="bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold px-3 py-1 rounded transition flex items-center gap-1">
+              🔄 재탐색
+            </button>
+          </div>
+
+          <!-- 로딩 상태 -->
+          <div id="aiOptLoading" class="py-12 text-center space-y-3">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-emerald-500 border-t-transparent"></div>
+            <p class="text-xs text-slate-400">수천 개의 자산 배분 비중 조합을 시뮬레이션 및 4축 채점 중입니다...</p>
+          </div>
+
+          <!-- 탐색 결과 카드 컨테이너 -->
+          <div id="aiOptResults" class="hidden space-y-3"></div>
+        </div>
+
+        <div class="p-3 border-t border-slate-800 bg-slate-950 flex justify-between items-center">
+          <span class="text-[11px] text-slate-400">💡 [적용] 버튼을 누르면 커스텀 포트폴리오에 자동 입력되고 시뮬레이션이 즉시 실행됩니다.</span>
+          <button onclick="UIController.closeAIOptimizerModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs py-1.5 px-4 rounded-lg transition">
+            닫기
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- 요약 카드 영역 -->
     <div id="summaryCards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3"></div>
 
@@ -475,7 +532,7 @@ const EMBEDDED_FF_FACTORS_1985_2026 = {"1985-01-02":[-0.0093,0.0074,0.0026,-0.00
               <th onclick="UIController.showMetricInfo('시장 민감도 (베타)', 'S&P 500 시장 지수가 1% 변동할 때 얼마나 민감하게 반응하는지 나타냅니다.')" class="px-3 py-2.5 cursor-pointer hover:bg-slate-800 transition whitespace-nowrap">시장 민감도 (베타) ℹ️</th>
               <th onclick="UIController.showMetricInfo('소형주 성향 (SMB)', '대형주 대비 소형주 특성(Small Minus Big)의 영향을 받는 정도입니다.')" class="px-3 py-2.5 text-emerald-400 cursor-pointer hover:bg-slate-800 transition whitespace-nowrap">소형주 성향 (SMB) ℹ️</th>
               <th onclick="UIController.showMetricInfo('가치주 성향 (HML)', '성장주 대비 가치주/저평가 특성(High Minus Low)의 영향을 받는 정도입니다.')" class="px-3 py-2.5 text-amber-400 cursor-pointer hover:bg-slate-800 transition whitespace-nowrap">가치주 성향 (HML) ℹ️</th>
-              <th onclick="UIController.showMetricInfo('상승세 추종 (MOM)', '최근 상승 모멘텀 추세(Momentum)를 얼마나 강하게 추종하는지 보여줍니다.')" class="px-3 py-2.5 text-cyan-400 cursor-pointer hover:bg-slate-800 transition whitespace-nowrap">상승세 추종 (MOM) ℹ️</th>
+              <th onclick="UIController.showMetricInfo('모멘텀 민감도 (MOM 베타)', 'Carhart 4-Factor 공식 모멘텀(Momentum) 민감도 베타입니다. 시장 대비 모멘텀 팩터(SPMO) 변동에 반응하는 민감도로, 0.0은 시장 평균, +1.0은 순수 모멘텀 ETF(SPMO) 수준의 강한 추종을 뜻합니다.')" class="px-3 py-2.5 text-cyan-400 cursor-pointer hover:bg-slate-800 transition whitespace-nowrap">모멘텀 민감도 (MOM) ℹ️</th>
               <th onclick="UIController.showMetricInfo('모델 설명력 (R²)', '이 요인 모델이 주가 변동을 얼마나 정확히 설명하는지 비율입니다.')" class="px-3 py-2.5 cursor-pointer hover:bg-slate-800 transition whitespace-nowrap">모델 설명력 (R²) ℹ️</th>
             </tr>
           </thead>
@@ -2104,6 +2161,276 @@ class MultiFactorSynthesisEngine {
       }
     }
 
+    class PortfolioOptimizerEngine {
+      static async optimize(processedPrices, dates, periodMonths, universeType = 'all', selectedTickers = [], avgRf = 3.5) {
+        const N = dates.length - 1;
+        if (N < 15) return null;
+
+        const dbPrices = (typeof EMBEDDED_OFFLINE_MARKET_DB !== 'undefined' && EMBEDDED_OFFLINE_MARKET_DB.prices)
+          ? EMBEDDED_OFFLINE_MARKET_DB.prices
+          : {};
+
+        const excludeKeys = new Set(['^GSPC', '^IXIC', '^KS11', '^NDX', '^SOX', '^TYX', 'KRW=X']);
+        const allDbKeys = Object.keys(dbPrices).filter(k => !excludeKeys.has(k));
+        
+        let candidateKeys = [];
+        if (universeType === 'all') {
+          candidateKeys = allDbKeys.length > 0 ? allDbKeys : Object.keys(processedPrices).filter(k => !excludeKeys.has(k));
+        } else if (universeType === 'etf_only') {
+          const etfSet = new Set(['SPY', 'QQQ', 'QQQM', 'SPMO', 'SCHD', 'XLK', 'SMH', 'XLE', 'IWM', 'TLT', 'TMF', 'QLD', 'TQQQ', 'SSO', 'UPRO', 'SOXL', 'GGLL', 'SQQQ', 'ARKK', 'JEPI', 'GLD', 'VNQ', 'VOO']);
+          candidateKeys = allDbKeys.filter(k => etfSet.has(k));
+        } else if (universeType === 'stocks_only') {
+          const stockSet = new Set(['AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL', 'META', 'TSLA', 'AVGO', 'LLY', 'TSM', 'BRK-B', '005930.KS', '000660.KS', '005380.KS', '000270.KS', '035420.KS', '035720.KS', '068270.KS', '105560.KS', '207940.KS', '373220.KS']);
+          candidateKeys = allDbKeys.filter(k => stockSet.has(k));
+        } else {
+          candidateKeys = (selectedTickers && selectedTickers.length > 0) ? selectedTickers : Object.keys(processedPrices);
+        }
+
+        const validTickers = [];
+        const dailyReturns = {};
+
+        candidateKeys.forEach(t => {
+          if (processedPrices && processedPrices[t] && processedPrices[t].length > N) {
+            const p = processedPrices[t];
+            let isValid = true;
+            const rets = new Float64Array(N);
+            for (let i = 0; i < N; i++) {
+              if (p[i] <= 0 || p[i + 1] <= 0) { isValid = false; break; }
+              rets[i] = (p[i + 1] - p[i]) / p[i];
+            }
+            if (isValid) {
+              validTickers.push(t);
+              dailyReturns[t] = rets;
+              return;
+            }
+          }
+
+          if (dbPrices[t]) {
+            const pMap = dbPrices[t];
+            let presentCount = 0;
+            for (let i = 0; i <= N; i++) {
+              if (pMap[dates[i]] > 0) presentCount++;
+            }
+            if (presentCount >= N * 0.90) {
+              const rets = new Float64Array(N);
+              let lastVal = pMap[dates[0]] || 0;
+              for (let i = 0; i < N; i++) {
+                const curVal = pMap[dates[i + 1]] || lastVal;
+                if (lastVal > 0 && curVal > 0) {
+                  rets[i] = (curVal - lastVal) / lastVal;
+                  lastVal = curVal;
+                } else {
+                  rets[i] = 0.0;
+                }
+              }
+              validTickers.push(t);
+              dailyReturns[t] = rets;
+            }
+          }
+        });
+
+        if (validTickers.length < 2) {
+          if (validTickers.length === 1) {
+            const singleT = validTickers[0];
+            return {
+              totalEvaluated: 1,
+              bestScore: { allocations: { [singleT]: 100 }, score: 50, cagr: 10, mdd: 20, sharpe: 0.5, sortino: 0.7, ulcer: 5 },
+              maxSharpe: { allocations: { [singleT]: 100 }, score: 50, cagr: 10, mdd: 20, sharpe: 0.5, sortino: 0.7, ulcer: 5 },
+              minMDD: { allocations: { [singleT]: 100 }, score: 50, cagr: 10, mdd: 20, sharpe: 0.5, sortino: 0.7, ulcer: 5 },
+              maxCAGR: { allocations: { [singleT]: 100 }, score: 50, cagr: 10, mdd: 20, sharpe: 0.5, sortino: 0.7, ulcer: 5 }
+            };
+          }
+          return null;
+        }
+
+        const years = Math.max(0.1, N / 252.0);
+        const rfDaily = (avgRf / 100.0) / 252.0;
+
+        const individualStats = [];
+        validTickers.forEach(t => {
+          const r = dailyReturns[t];
+          let sumExcess = 0, sumSqExcess = 0;
+          for (let i = 0; i < N; i++) {
+            const ex = r[i] - rfDaily;
+            sumExcess += ex;
+            sumSqExcess += ex * ex;
+          }
+          const meanEx = sumExcess / N;
+          const varEx = (sumSqExcess / N) - (meanEx * meanEx);
+          const vol = Math.sqrt(Math.max(1e-12, varEx));
+          const sharpe = vol > 0 ? (meanEx / vol) * Math.sqrt(252) : 0;
+          individualStats.push({ ticker: t, sharpe });
+        });
+
+        individualStats.sort((a, b) => b.sharpe - a.sharpe);
+        const topCandidates = individualStats.slice(0, 18).map(x => x.ticker);
+
+        const anchors = ['SPY', 'QQQ', 'SPMO', 'SCHD', 'TLT', 'GLD', 'NVDA', 'AAPL', 'MSFT', '005930.KS'];
+        anchors.forEach(a => {
+          if (validTickers.includes(a) && !topCandidates.includes(a)) {
+            topCandidates.push(a);
+          }
+        });
+
+        const results = [];
+
+        const evaluateAllocation = (allocMap) => {
+          const keys = Object.keys(allocMap);
+          const rPort = new Float64Array(N);
+          
+          for (let k = 0; k < keys.length; k++) {
+            const sym = keys[k];
+            const w = allocMap[sym] / 100.0;
+            const rAsset = dailyReturns[sym];
+            if (!rAsset) return;
+            for (let i = 0; i < N; i++) {
+              rPort[i] += w * rAsset[i];
+            }
+          }
+
+          let cum = 1.0;
+          let peak = 1.0;
+          let maxDD = 0.0;
+          let sumExcess = 0.0;
+          let sumSqExcess = 0.0;
+          let sumSqDownside = 0.0;
+          let sumDDSq = 0.0;
+          let negCount = 0;
+
+          for (let i = 0; i < N; i++) {
+            cum *= (1.0 + rPort[i]);
+            if (cum > peak) peak = cum;
+            const dd = (cum - peak) / peak;
+            if (dd < maxDD) maxDD = dd;
+            sumDDSq += (dd * 100.0) * (dd * 100.0);
+
+            const excess = rPort[i] - rfDaily;
+            sumExcess += excess;
+            sumSqExcess += excess * excess;
+
+            if (rPort[i] < 0) {
+              sumSqDownside += rPort[i] * rPort[i];
+              negCount++;
+            }
+          }
+
+          const cagr = (Math.pow(Math.max(1e-6, cum), 1.0 / years) - 1.0) * 100.0;
+          const mdd = Math.abs(maxDD) * 100.0;
+          const ulcer = Math.sqrt(sumDDSq / N);
+
+          const meanExcess = sumExcess / N;
+          const varExcess = (sumSqExcess / N) - (meanExcess * meanExcess);
+          const volDaily = Math.sqrt(Math.max(1e-12, varExcess));
+          const sharpe = volDaily > 0 ? (meanExcess / volDaily) * Math.sqrt(252) : 0;
+
+          const downVolDaily = negCount > 0 ? Math.sqrt(sumSqDownside / N) : volDaily;
+          const sortino = downVolDaily > 0 ? (meanExcess / downVolDaily) * Math.sqrt(252) : 0;
+
+          const omega = downVolDaily > 0 ? 1.0 + (meanExcess / downVolDaily) : 1.0;
+          const painRatio = ulcer > 0 ? Math.max(0, (cagr - avgRf) / ulcer) : 0;
+          const cvar95 = volDaily * 1.645 * 100.0;
+          const trackingError = volDaily * Math.sqrt(252) * 100.0;
+
+          const tempRes = {
+            annualizedXIRR: cagr,
+            sortino: Math.max(0, sortino),
+            omega: Math.max(0, omega),
+            painRatio: Math.max(0, painRatio),
+            ulcerIndex: ulcer,
+            cvar95: cvar95,
+            twrMdd: mdd,
+            informationRatio: Math.max(0, (cagr - 10.0) / Math.max(1.0, trackingError)),
+            ff: { alpha: Math.max(-10, Math.min(25, cagr - 10.0)) },
+            trackingError: trackingError,
+            monteCarlo: { p5: cum * 0.7, p50: cum }
+          };
+
+          const score = QuantScoreEngine.calculateScore(tempRes, periodMonths, avgRf, 'BALANCED');
+
+          results.push({
+            allocations: allocMap,
+            score,
+            cagr: Math.round(cagr * 100) / 100,
+            mdd: Math.round(mdd * 100) / 100,
+            sharpe: Math.round(sharpe * 1000) / 1000,
+            sortino: Math.round(sortino * 1000) / 1000,
+            ulcer: Math.round(ulcer * 100) / 100
+          });
+        };
+
+        // 1-Asset baseline
+        validTickers.forEach(t => {
+          evaluateAllocation({ [t]: 100 });
+        });
+
+        // 2-Asset combinations
+        const step2 = topCandidates.length > 14 ? 10 : 5;
+        for (let i = 0; i < topCandidates.length; i++) {
+          for (let j = i + 1; j < topCandidates.length; j++) {
+            const t1 = topCandidates[i], t2 = topCandidates[j];
+            for (let w = step2; w <= 100 - step2; w += step2) {
+              evaluateAllocation({ [t1]: w, [t2]: 100 - w });
+            }
+          }
+        }
+
+        // 3-Asset combinations
+        const top14 = topCandidates.slice(0, 14);
+        for (let i = 0; i < top14.length; i++) {
+          for (let j = i + 1; j < top14.length; j++) {
+            for (let k = j + 1; k < top14.length; k++) {
+              const t1 = top14[i], t2 = top14[j], t3 = top14[k];
+              for (let w1 = 15; w1 <= 70; w1 += 15) {
+                for (let w2 = 15; w2 <= 85 - w1; w2 += 15) {
+                  const w3 = 100 - w1 - w2;
+                  if (w3 <= 0) continue;
+                  evaluateAllocation({ [t1]: w1, [t2]: w2, [t3]: w3 });
+                }
+              }
+            }
+          }
+        }
+
+        // 4-Asset combinations for top core leaders
+        const top6 = topCandidates.slice(0, 6);
+        if (top6.length >= 4) {
+          for (let a = 0; a < top6.length; a++) {
+            for (let b = a + 1; b < top6.length; b++) {
+              for (let c = b + 1; c < top6.length; c++) {
+                for (let d = c + 1; d < top6.length; d++) {
+                  const t1 = top6[a], t2 = top6[b], t3 = top6[c], t4 = top6[d];
+                  for (let w1 = 15; w1 <= 55; w1 += 15) {
+                    for (let w2 = 15; w2 <= 70 - w1; w2 += 15) {
+                      for (let w3 = 15; w3 <= 85 - w1 - w2; w3 += 15) {
+                        const w4 = 100 - w1 - w2 - w3;
+                        if (w4 <= 0) continue;
+                        evaluateAllocation({ [t1]: w1, [t2]: w2, [t3]: w3, [t4]: w4 });
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        if (results.length === 0) return null;
+
+        const bestScore = [...results].sort((a, b) => b.score - a.score)[0];
+        const maxSharpe = [...results].sort((a, b) => b.sharpe - a.sharpe)[0];
+        const minMDD = [...results].sort((a, b) => a.mdd - b.mdd)[0];
+        const maxCAGR = [...results].sort((a, b) => b.cagr - a.cagr)[0];
+
+        return {
+          totalEvaluated: results.length,
+          bestScore,
+          maxSharpe,
+          minMDD,
+          maxCAGR
+        };
+      }
+    }
+
     class GlobalLeaderboardService {
       static async fetchLeaderboard() {
         try {
@@ -3173,6 +3500,157 @@ class QuantBacktestEngine {
           }
         };
         reader.readAsText(file);
+      }
+
+      static async openAIOptimizerModal() {
+        const modal = document.getElementById('aiOptimizerModal');
+        if (!modal) return;
+        modal.classList.remove('hidden');
+        await this.runAIOptimizer();
+      }
+
+      static closeAIOptimizerModal() {
+        const modal = document.getElementById('aiOptimizerModal');
+        if (modal) modal.classList.add('hidden');
+      }
+
+      static async runAIOptimizer() {
+        const loading = document.getElementById('aiOptLoading');
+        const resultsCont = document.getElementById('aiOptResults');
+        const subtitle = document.getElementById('aiOptimizerSubtitle');
+        const universeType = document.getElementById('aiOptUniverseSelect')?.value || 'selected';
+
+        if (loading) loading.classList.remove('hidden');
+        if (resultsCont) {
+          resultsCont.classList.add('hidden');
+          resultsCont.innerHTML = '';
+        }
+
+        const startMonth = document.getElementById('startMonth')?.value || '2000-01';
+        const endMonth = document.getElementById('endMonth')?.value || '2026-07';
+        const periodMonths = QuantScoreEngine.calculatePeriodMonths(startMonth, endMonth);
+        const yearsStr = (periodMonths / 12).toFixed(1);
+
+        if (subtitle) {
+          subtitle.innerText = `검증 구간: ${startMonth} ~ ${endMonth} (${yearsStr}년, 총 ${periodMonths}개월) 전수 조사 중...`;
+        }
+
+        await new Promise(r => setTimeout(r, 60));
+
+        let processedData = this.lastProcessedData;
+        if (!processedData || !processedData.processedPrices) {
+          await this.runBacktest();
+          processedData = this.lastProcessedData;
+        }
+
+        if (!processedData || !processedData.processedPrices) {
+          if (loading) loading.classList.add('hidden');
+          if (resultsCont) {
+            resultsCont.classList.remove('hidden');
+            resultsCont.innerHTML = `<div class="p-6 text-center text-slate-400">데이터가 준비되지 않았습니다. 백테스트를 먼저 실행해 주세요.</div>`;
+          }
+          return;
+        }
+
+        const optResult = await PortfolioOptimizerEngine.optimize(
+          processedData.processedPrices,
+          processedData.dates,
+          periodMonths,
+          universeType,
+          this.selectedTickers,
+          3.5
+        );
+
+        if (loading) loading.classList.add('hidden');
+        if (!optResult || !resultsCont) return;
+
+        if (subtitle) {
+          subtitle.innerHTML = `검증 구간: <span class="text-emerald-400 font-bold">${startMonth} ~ ${endMonth}</span> (${yearsStr}년) | 총 <span class="text-amber-400 font-bold">${optResult.totalEvaluated.toLocaleString()}개</span> 조합 시뮬레이션 완료`;
+        }
+
+        const renderCard = (title, icon, badgeClass, data, strategyName, isBest = false) => {
+          if (!data) return '';
+          const allocEntries = Object.entries(data.allocations).sort((a, b) => b[1] - a[1]);
+          const allocBadges = allocEntries.map(([t, w]) => `
+            <span class="inline-flex items-center gap-1 bg-slate-900 border border-slate-700 px-2 py-0.5 rounded text-xs">
+              <strong class="text-slate-100">${t}</strong>
+              <span class="text-amber-400 font-bold font-num">${w}%</span>
+            </span>
+          `).join('');
+
+          const allocPayload = JSON.stringify(data.allocations).replace(/"/g, '&quot;');
+
+          return `
+            <div class="bg-slate-950/80 border ${isBest ? 'border-amber-500/80 shadow-lg shadow-amber-500/10' : 'border-slate-800'} rounded-xl p-3.5 space-y-3 transition hover:border-slate-700">
+              <div class="flex items-center justify-between flex-wrap gap-2">
+                <div class="flex items-center gap-2">
+                  <span class="text-base">${icon}</span>
+                  <h4 class="font-bold text-xs ${isBest ? 'text-amber-400' : 'text-slate-200'}">${title}</h4>
+                  <span class="text-[10px] ${badgeClass} px-2 py-0.5 rounded font-bold whitespace-nowrap">종합점수 ${data.score}점</span>
+                </div>
+                <button onclick="UIController.applyOptimalMix(JSON.parse('${allocPayload}'), '${QuantUtils.escapeHTML(strategyName)}')" class="bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-bold text-xs px-3.5 py-1.5 rounded-lg transition whitespace-nowrap shadow flex items-center gap-1">
+                  ✨ 내 포트폴리오에 적용
+                </button>
+              </div>
+
+              <div class="flex items-center gap-1.5 flex-wrap pt-0.5">
+                ${allocBadges}
+              </div>
+
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-slate-900 text-slate-300 text-[11px]">
+                <div class="bg-slate-900/60 p-2 rounded border border-slate-800/80">
+                  <span class="text-slate-500 block text-[10px]">연수익률 (XIRR)</span>
+                  <span class="font-bold text-cyan-400 text-xs font-num">${data.cagr >= 0 ? '+' : ''}${data.cagr.toFixed(1)}%</span>
+                </div>
+                <div class="bg-slate-900/60 p-2 rounded border border-slate-800/80">
+                  <span class="text-slate-500 block text-[10px]">최대 낙폭 (MDD)</span>
+                  <span class="font-bold text-rose-400 text-xs font-num">-${data.mdd.toFixed(1)}%</span>
+                </div>
+                <div class="bg-slate-900/60 p-2 rounded border border-slate-800/80">
+                  <span class="text-slate-500 block text-[10px]">샤프 지수 (Sharpe)</span>
+                  <span class="font-bold text-amber-300 text-xs font-num">${data.sharpe.toFixed(3)}</span>
+                </div>
+                <div class="bg-slate-900/60 p-2 rounded border border-slate-800/80">
+                  <span class="text-slate-500 block text-[10px]">소티노 지수 (Sortino)</span>
+                  <span class="font-bold text-emerald-400 text-xs font-num">${data.sortino.toFixed(3)}</span>
+                </div>
+              </div>
+            </div>
+          `;
+        };
+
+        resultsCont.innerHTML = `
+          ${renderCard('🥇 1위 최고 종합점수 챔피언 전략', '👑', 'bg-amber-950 text-amber-300 border border-amber-700', optResult.bestScore, `[AI 최적화] 최고점수 조합 (${startMonth}~${endMonth})`, true)}
+          ${renderCard('🥈 2위 최대 샤프 지수 (위험 대비 보상 극대화)', '📈', 'bg-emerald-950 text-emerald-300 border border-emerald-700', optResult.maxSharpe, `[AI 최적화] 최대샤프 조합 (${startMonth}~${endMonth})`)}
+          ${renderCard('🥉 3위 철벽 방어 최저 낙폭 (극저낙폭 방어형)', '🛡️', 'bg-purple-950 text-purple-300 border border-purple-700', optResult.minMDD, `[AI 최적화] 최저낙폭 조합 (${startMonth}~${endMonth})`)}
+          ${renderCard('🚀 4위 최고 연수익률 (공격형 고수익 극대화)', '🔥', 'bg-cyan-950 text-cyan-300 border border-cyan-700', optResult.maxCAGR, `[AI 최적화] 최고수익 조합 (${startMonth}~${endMonth})`)}
+        `;
+
+        resultsCont.classList.remove('hidden');
+      }
+
+      static applyOptimalMix(allocMap, name) {
+        if (!allocMap) return;
+        
+        let targetMix = this.customMixes[0];
+        if (!targetMix) {
+          targetMix = {
+            id: `mix_${Date.now()}`,
+            name: name || 'AI 기간 최적화 챔피언 전략',
+            enabled: true,
+            allocations: allocMap
+          };
+          this.customMixes.push(targetMix);
+        } else {
+          targetMix.name = name || 'AI 기간 최적화 챔피언 전략';
+          targetMix.enabled = true;
+          targetMix.allocations = allocMap;
+        }
+
+        this.renderCustomMixes();
+        this.closeAIOptimizerModal();
+        this.runBacktest();
+        ToastNotifier.show(`'${targetMix.name}'이(가) 커스텀 포트폴리오에 즉시 적용되었습니다!`, 'success');
       }
 
       static toggleModal() {

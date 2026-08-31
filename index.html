@@ -2170,7 +2170,7 @@ class MultiFactorSynthesisEngine {
     }
 
     class PortfolioOptimizerEngine {
-      static async optimize(processedPrices, dates, periodMonths, universeType = 'all', selectedTickers = [], avgRf = 3.5) {
+      static async optimize(dates, periodMonths, universeType = 'all', selectedTickers = [], avgRf = 3.5) {
         const N = dates.length - 1;
         if (N < 15) return null;
 
@@ -2183,7 +2183,7 @@ class MultiFactorSynthesisEngine {
         
         let candidateKeys = [];
         if (universeType === 'all') {
-          candidateKeys = allDbKeys.length > 0 ? allDbKeys : Object.keys(processedPrices).filter(k => !excludeKeys.has(k));
+          candidateKeys = allDbKeys;
         } else if (universeType === 'etf_only') {
           const etfSet = new Set(['SPY', 'QQQ', 'QQQM', 'SPMO', 'SCHD', 'XLK', 'SMH', 'XLE', 'IWM', 'TLT', 'TMF', 'QLD', 'TQQQ', 'SSO', 'UPRO', 'SOXL', 'GGLL', 'SQQQ', 'ARKK', 'JEPI', 'GLD', 'VNQ', 'VOO']);
           candidateKeys = allDbKeys.filter(k => etfSet.has(k));
@@ -2191,48 +2191,38 @@ class MultiFactorSynthesisEngine {
           const stockSet = new Set(['AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL', 'META', 'TSLA', 'AVGO', 'LLY', 'TSM', 'BRK-B', '005930.KS', '000660.KS', '005380.KS', '000270.KS', '035420.KS', '035720.KS', '068270.KS', '105560.KS', '207940.KS', '373220.KS']);
           candidateKeys = allDbKeys.filter(k => stockSet.has(k));
         } else {
-          candidateKeys = (selectedTickers && selectedTickers.length > 0) ? selectedTickers : Object.keys(processedPrices);
+          // selected
+          candidateKeys = (selectedTickers && selectedTickers.length > 0) ? selectedTickers : allDbKeys;
         }
 
         const validTickers = [];
         const dailyReturns = {};
 
-        candidateKeys.forEach(t => {
-          if (processedPrices && processedPrices[t] && processedPrices[t].length > N) {
-            const p = processedPrices[t];
-            let isValid = true;
-            const rets = new Float64Array(N);
-            for (let i = 0; i < N; i++) {
-              if (p[i] <= 0 || p[i + 1] <= 0) { isValid = false; break; }
-              rets[i] = (p[i + 1] - p[i]) / p[i];
-            }
-            if (isValid) {
-              validTickers.push(t);
-              dailyReturns[t] = rets;
-              return;
-            }
+        candidateKeys.forEach(rawT => {
+          const sym = MarketDataFetcher.resolveSymbol(rawT);
+          const pMap = dbPrices[sym] || dbPrices[rawT];
+          if (!pMap) return;
+
+          let presentCount = 0;
+          for (let i = 0; i <= N; i++) {
+            if (pMap[dates[i]] > 0) presentCount++;
           }
 
-          if (dbPrices[t]) {
-            const pMap = dbPrices[t];
-            let presentCount = 0;
-            for (let i = 0; i <= N; i++) {
-              if (pMap[dates[i]] > 0) presentCount++;
-            }
-            if (presentCount >= N * 0.90) {
-              const rets = new Float64Array(N);
-              let lastVal = pMap[dates[0]] || 0;
-              for (let i = 0; i < N; i++) {
-                const curVal = pMap[dates[i + 1]] || lastVal;
-                if (lastVal > 0 && curVal > 0) {
-                  rets[i] = (curVal - lastVal) / lastVal;
-                  lastVal = curVal;
-                } else {
-                  rets[i] = 0.0;
-                }
+          if (presentCount >= N * 0.85) {
+            const rets = new Float64Array(N);
+            let lastVal = pMap[dates[0]] || 0;
+            for (let i = 0; i < N; i++) {
+              const curVal = pMap[dates[i + 1]] || lastVal;
+              if (lastVal > 0 && curVal > 0) {
+                rets[i] = (curVal - lastVal) / lastVal;
+                lastVal = curVal;
+              } else {
+                rets[i] = 0.0;
               }
-              validTickers.push(t);
-              dailyReturns[t] = rets;
+            }
+            if (!validTickers.includes(sym)) {
+              validTickers.push(sym);
+              dailyReturns[sym] = rets;
             }
           }
         });
@@ -2240,12 +2230,13 @@ class MultiFactorSynthesisEngine {
         if (validTickers.length < 2) {
           if (validTickers.length === 1) {
             const singleT = validTickers[0];
+            const dispName = (typeof TICKER_UNIVERSE !== 'undefined') ? (TICKER_UNIVERSE[singleT]?.name ? singleT : Object.keys(TICKER_UNIVERSE).find(k => TICKER_UNIVERSE[k].symbol === singleT) || singleT) : singleT;
             return {
               totalEvaluated: 1,
-              bestScore: { allocations: { [singleT]: 100 }, score: 50, cagr: 10, mdd: 20, sharpe: 0.5, sortino: 0.7, ulcer: 5 },
-              maxSharpe: { allocations: { [singleT]: 100 }, score: 50, cagr: 10, mdd: 20, sharpe: 0.5, sortino: 0.7, ulcer: 5 },
-              minMDD: { allocations: { [singleT]: 100 }, score: 50, cagr: 10, mdd: 20, sharpe: 0.5, sortino: 0.7, ulcer: 5 },
-              maxCAGR: { allocations: { [singleT]: 100 }, score: 50, cagr: 10, mdd: 20, sharpe: 0.5, sortino: 0.7, ulcer: 5 }
+              bestScore: { allocations: { [dispName]: 100 }, score: 50, cagr: 10, mdd: 20, sharpe: 0.5, sortino: 0.7, ulcer: 5 },
+              maxSharpe: { allocations: { [dispName]: 100 }, score: 50, cagr: 10, mdd: 20, sharpe: 0.5, sortino: 0.7, ulcer: 5 },
+              minMDD: { allocations: { [dispName]: 100 }, score: 50, cagr: 10, mdd: 20, sharpe: 0.5, sortino: 0.7, ulcer: 5 },
+              maxCAGR: { allocations: { [dispName]: 100 }, score: 50, cagr: 10, mdd: 20, sharpe: 0.5, sortino: 0.7, ulcer: 5 }
             };
           }
           return null;
@@ -3596,7 +3587,6 @@ class QuantBacktestEngine {
         }
 
         const optResult = await PortfolioOptimizerEngine.optimize(
-          this.lastProcessedData?.processedPrices || dbPrices,
           dates,
           periodMonths,
           universeType,

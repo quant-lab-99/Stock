@@ -919,7 +919,16 @@ const EMBEDDED_FF_FACTORS_1985_2026 = {"1985-01-02":[-0.0093,0.0074,0.0026,-0.00
     }
 
     /* Polygon.io / Finnhub / CORS 다중 백업 페처 */
-            class MarketDataFetcher {
+    class MarketDataFetcher {
+      static resolveSymbol(ticker) {
+        if (!ticker) return ticker;
+        if (ticker === 'KOSPI') return '^KS11';
+        if (typeof TICKER_UNIVERSE !== 'undefined' && TICKER_UNIVERSE[ticker]?.symbol) {
+          return TICKER_UNIVERSE[ticker].symbol;
+        }
+        return ticker;
+      }
+
       static async fetchChartData(ticker, startYear, endYear) {
         const cacheKey = `${ticker}_${startYear}_${endYear}_v15_3`;
         const cached = await QuantDataCache.get(cacheKey);
@@ -930,11 +939,12 @@ const EMBEDDED_FF_FACTORS_1985_2026 = {"1985-01-02":[-0.0093,0.0074,0.0026,-0.00
           };
         }
 
+        const sym = this.resolveSymbol(ticker);
+
         // ① 내장 오프라인 고정밀 시장 DB (1985~2026) 0ms 즉시 반환 (Zero-Failure, 100% 무결성)
-        if (typeof EMBEDDED_OFFLINE_MARKET_DB !== 'undefined') {
-          const sym = (ticker === 'KOSPI') ? '^KS11' : ticker;
-          const pObj = EMBEDDED_OFFLINE_MARKET_DB.prices[ticker] || EMBEDDED_OFFLINE_MARKET_DB.prices[sym];
-          const dObj = EMBEDDED_OFFLINE_MARKET_DB.divs[ticker] || EMBEDDED_OFFLINE_MARKET_DB.divs[sym] || {};
+        if (typeof EMBEDDED_OFFLINE_MARKET_DB !== 'undefined' && EMBEDDED_OFFLINE_MARKET_DB.prices) {
+          const pObj = EMBEDDED_OFFLINE_MARKET_DB.prices[sym] || EMBEDDED_OFFLINE_MARKET_DB.prices[ticker];
+          const dObj = (EMBEDDED_OFFLINE_MARKET_DB.divs && (EMBEDDED_OFFLINE_MARKET_DB.divs[sym] || EMBEDDED_OFFLINE_MARKET_DB.divs[ticker])) || {};
 
           if (pObj && Object.keys(pObj).length > 0) {
             const priceMap = new Map();
@@ -966,7 +976,7 @@ const EMBEDDED_FF_FACTORS_1985_2026 = {"1985-01-02":[-0.0093,0.0074,0.0026,-0.00
 
         // ② 로컬 Direct-API 서버(/api/chart) 호출
         try {
-          const localUrl = `/api/chart?ticker=${encodeURIComponent(ticker)}&startYear=${startYear}&endYear=${endYear}`;
+          const localUrl = `/api/chart?ticker=${encodeURIComponent(sym)}&startYear=${startYear}&endYear=${endYear}`;
           const res = await QuantUtils.fetchWithTimeout(localUrl, { timeout: 3000 });
           if (res.ok) {
             const data = await res.json();
@@ -1010,7 +1020,7 @@ const EMBEDDED_FF_FACTORS_1985_2026 = {"1985-01-02":[-0.0093,0.0074,0.0026,-0.00
 
       static async fetchPolygonData(ticker, startYear, endYear, apiKey) {
         try {
-          const sym = ticker === 'KOSPI' ? 'I:KS11' : ticker.replace('^', 'I:');
+          const sym = this.resolveSymbol(ticker).replace('^', 'I:');
           const from = `${startYear}-01-01`;
           const to = `${endYear}-12-31`;
           const url = `https://api.polygon.io/v2/aggs/ticker/${encodeURIComponent(sym)}/range/1/day/${from}/${to}?adjusted=true&sort=asc&limit=50000&apiKey=${apiKey}`;
@@ -1037,7 +1047,7 @@ const EMBEDDED_FF_FACTORS_1985_2026 = {"1985-01-02":[-0.0093,0.0074,0.0026,-0.00
 
       static async fetchFinnhubData(ticker, startYear, endYear, apiKey) {
         try {
-          const sym = ticker === 'KOSPI' ? '^KS11' : ticker;
+          const sym = this.resolveSymbol(ticker);
           const startSec = Math.floor(new Date(`${startYear}-01-01T00:00:00Z`).getTime() / 1000);
           const endSec = Math.floor(new Date(`${endYear}-12-31T23:59:59Z`).getTime() / 1000);
           const url = `https://finnhub.io/api/v1/stock/candle?symbol=${encodeURIComponent(sym)}&resolution=D&from=${startSec}&to=${endSec}&token=${apiKey}`;
@@ -1066,15 +1076,13 @@ const EMBEDDED_FF_FACTORS_1985_2026 = {"1985-01-02":[-0.0093,0.0074,0.0026,-0.00
       }
     }
 
-
-class YahooFinanceFetcher {
-  static async fetchChartData(ticker, startYear, endYear) {
-    const config = TICKER_UNIVERSE[ticker];
-    const sym = config?.symbol || (ticker === 'KOSPI' ? '^KS11' : ticker);
-    const startSec = Math.floor(new Date(`${startYear}-01-01T00:00:00Z`).getTime() / 1000);
-    const endSec = Math.floor(new Date(`${endYear}-12-31T23:59:59Z`).getTime() / 1000);
-   
-    const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?period1=${startSec}&period2=${endSec}&interval=1d&events=div`;
+    class YahooFinanceFetcher {
+      static async fetchChartData(ticker, startYear, endYear) {
+        const sym = MarketDataFetcher.resolveSymbol(ticker);
+        const startSec = Math.floor(new Date(`${startYear}-01-01T00:00:00Z`).getTime() / 1000);
+        const endSec = Math.floor(new Date(`${endYear}-12-31T23:59:59Z`).getTime() / 1000);
+       
+        const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?period1=${startSec}&period2=${endSec}&interval=1d&events=div`;
    
     const baseProxies = [
       `https://corsproxy.io/?${encodeURIComponent(yahooUrl)}`,
@@ -2272,15 +2280,27 @@ class MultiFactorSynthesisEngine {
           }
         });
 
+        const getDisplayName = (t) => {
+          if (typeof TICKER_UNIVERSE !== 'undefined') {
+            if (TICKER_UNIVERSE[t]) return t;
+            for (const [k, v] of Object.entries(TICKER_UNIVERSE)) {
+              if (v.symbol === t) return k;
+            }
+          }
+          return t;
+        };
+
         const results = [];
 
         const evaluateAllocation = (allocMap) => {
           const keys = Object.keys(allocMap);
           const rPort = new Float64Array(N);
+          const displayAllocMap = {};
           
           for (let k = 0; k < keys.length; k++) {
             const sym = keys[k];
             const w = allocMap[sym] / 100.0;
+            displayAllocMap[getDisplayName(sym)] = allocMap[sym];
             const rAsset = dailyReturns[sym];
             if (!rAsset) return;
             for (let i = 0; i < N; i++) {
@@ -2348,7 +2368,7 @@ class MultiFactorSynthesisEngine {
           const score = QuantScoreEngine.calculateScore(tempRes, periodMonths, avgRf, 'BALANCED');
 
           results.push({
-            allocations: allocMap,
+            allocations: displayAllocMap,
             score,
             cagr: Math.round(cagr * 100) / 100,
             mdd: Math.round(mdd * 100) / 100,
@@ -3518,7 +3538,7 @@ class QuantBacktestEngine {
         const loading = document.getElementById('aiOptLoading');
         const resultsCont = document.getElementById('aiOptResults');
         const subtitle = document.getElementById('aiOptimizerSubtitle');
-        const universeType = document.getElementById('aiOptUniverseSelect')?.value || 'selected';
+        const universeType = document.getElementById('aiOptUniverseSelect')?.value || 'all';
 
         if (loading) loading.classList.remove('hidden');
         if (resultsCont) {
@@ -3527,7 +3547,7 @@ class QuantBacktestEngine {
         }
 
         const startMonth = document.getElementById('startMonth')?.value || '2000-01';
-        const endMonth = document.getElementById('endMonth')?.value || '2026-07';
+        const endMonth = document.getElementById('endMonth')?.value || '2026-08';
         const periodMonths = QuantScoreEngine.calculatePeriodMonths(startMonth, endMonth);
         const yearsStr = (periodMonths / 12).toFixed(1);
 
@@ -3537,24 +3557,47 @@ class QuantBacktestEngine {
 
         await new Promise(r => setTimeout(r, 60));
 
-        let processedData = this.lastProcessedData;
-        if (!processedData || !processedData.processedPrices) {
-          await this.runBacktest();
-          processedData = this.lastProcessedData;
+        const startBound = `${startMonth}-01`;
+        const endBound = `${endMonth}-31`;
+
+        const dbPrices = (typeof EMBEDDED_OFFLINE_MARKET_DB !== 'undefined' && EMBEDDED_OFFLINE_MARKET_DB.prices)
+          ? EMBEDDED_OFFLINE_MARKET_DB.prices
+          : {};
+
+        // 벤치마크 SPY 또는 오프라인 DB로부터 해당 기간의 실제 거래일 목록 직접 추출
+        const dateSet = new Set();
+        if (dbPrices['SPY']) {
+          Object.keys(dbPrices['SPY']).forEach(d => {
+            if (d >= startBound && d <= endBound) dateSet.add(d);
+          });
+        }
+        if (dateSet.size === 0 && this.lastProcessedData?.dates) {
+          this.lastProcessedData.dates.forEach(d => {
+            if (d >= startBound && d <= endBound) dateSet.add(d);
+          });
+        }
+        if (dateSet.size === 0) {
+          Object.values(dbPrices).forEach(pMap => {
+            Object.keys(pMap).forEach(d => {
+              if (d >= startBound && d <= endBound) dateSet.add(d);
+            });
+          });
         }
 
-        if (!processedData || !processedData.processedPrices) {
+        const dates = Array.from(dateSet).sort();
+
+        if (dates.length < 15) {
           if (loading) loading.classList.add('hidden');
           if (resultsCont) {
             resultsCont.classList.remove('hidden');
-            resultsCont.innerHTML = `<div class="p-6 text-center text-slate-400">데이터가 준비되지 않았습니다. 백테스트를 먼저 실행해 주세요.</div>`;
+            resultsCont.innerHTML = `<div class="p-6 text-center text-slate-400">선택된 기간(${startMonth} ~ ${endMonth})에 유효한 거래일 데이터가 부족합니다. 백테스트 기간을 더 넓혀주세요.</div>`;
           }
           return;
         }
 
         const optResult = await PortfolioOptimizerEngine.optimize(
-          processedData.processedPrices,
-          processedData.dates,
+          this.lastProcessedData?.processedPrices || dbPrices,
+          dates,
           periodMonths,
           universeType,
           this.selectedTickers,
@@ -3562,7 +3605,13 @@ class QuantBacktestEngine {
         );
 
         if (loading) loading.classList.add('hidden');
-        if (!optResult || !resultsCont) return;
+        if (!optResult || !resultsCont) {
+          if (resultsCont) {
+            resultsCont.classList.remove('hidden');
+            resultsCont.innerHTML = `<div class="p-6 text-center text-slate-400">해당 조건에 만족하는 포트폴리오 조합을 도출하지 못했습니다. 탐색 대상을 '전체 50개'로 선택해 보세요.</div>`;
+          }
+          return;
+        }
 
         if (subtitle) {
           subtitle.innerHTML = `검증 구간: <span class="text-emerald-400 font-bold">${startMonth} ~ ${endMonth}</span> (${yearsStr}년) | 총 <span class="text-amber-400 font-bold">${optResult.totalEvaluated.toLocaleString()}개</span> 조합 시뮬레이션 완료`;
@@ -4257,6 +4306,7 @@ class QuantBacktestEngine {
 
           this.currentResults = results;
           this.currentSortedDates = sortedDates;
+          this.lastProcessedData = { processedPrices: processedData.processedPrices, dates: sortedDates };
 
           this.renderDashboard(results, sortedDates, taxEnabled);
           this.setProgress(100, '연산 완료');

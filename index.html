@@ -2178,72 +2178,79 @@ class MultiFactorSynthesisEngine {
           ? EMBEDDED_OFFLINE_MARKET_DB.prices
           : {};
 
-        const excludeKeys = new Set(['^GSPC', '^IXIC', '^KS11', '^NDX', '^SOX', '^TYX', 'KRW=X']);
-        const allDbKeys = Object.keys(dbPrices).filter(k => !excludeKeys.has(k));
-        
+        // 1. 모든 등록 티커의 원본 데이터셋 맵 생성 (백필 합성용)
+        const rawDatasets = {};
+        if (typeof TICKER_UNIVERSE !== 'undefined') {
+          Object.keys(TICKER_UNIVERSE).forEach(ticker => {
+            const sym = MarketDataFetcher.resolveSymbol(ticker);
+            const pMapObj = dbPrices[sym] || dbPrices[ticker];
+            const dMapObj = (EMBEDDED_OFFLINE_MARKET_DB.divs && (EMBEDDED_OFFLINE_MARKET_DB.divs[sym] || EMBEDDED_OFFLINE_MARKET_DB.divs[ticker])) || {};
+            if (pMapObj) {
+              rawDatasets[ticker] = {
+                priceMap: new Map(Object.entries(pMapObj)),
+                divMap: new Map(Object.entries(dMapObj))
+              };
+            }
+          });
+        }
+
+        // 2. MultiFactorSynthesisEngine을 통해 GGLL, TQQQ, SOXL, QLD, SPMO, SCHD, TLT, TMF 등 백필 완전 합성
+        const processedData = MultiFactorSynthesisEngine.process(rawDatasets, dates);
+        const { processedPrices } = processedData;
+
         let candidateKeys = [];
         if (universeType === 'all') {
-          candidateKeys = allDbKeys;
+          candidateKeys = Object.keys(TICKER_UNIVERSE);
         } else if (universeType === 'etf_only') {
-          const etfSet = new Set(['SPY', 'QQQ', 'QQQM', 'SPMO', 'SCHD', 'XLK', 'SMH', 'XLE', 'IWM', 'TLT', 'TMF', 'QLD', 'TQQQ', 'SSO', 'UPRO', 'SOXL', 'GGLL', 'SQQQ', 'ARKK', 'JEPI', 'GLD', 'VNQ', 'VOO']);
-          candidateKeys = allDbKeys.filter(k => etfSet.has(k));
+          candidateKeys = Object.keys(TICKER_UNIVERSE).filter(t => {
+            const cat = TICKER_UNIVERSE[t]?.category;
+            return cat === 'index_etf' || cat === 'growth_etf' || cat === 'dividend_etf' || cat === 'bond_gold_etf' || cat === 'leverage_etf';
+          });
         } else if (universeType === 'stocks_only') {
-          const stockSet = new Set(['AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL', 'META', 'TSLA', 'AVGO', 'LLY', 'TSM', 'BRK-B', '005930.KS', '000660.KS', '005380.KS', '000270.KS', '035420.KS', '035720.KS', '068270.KS', '105560.KS', '207940.KS', '373220.KS']);
-          candidateKeys = allDbKeys.filter(k => stockSet.has(k));
+          candidateKeys = Object.keys(TICKER_UNIVERSE).filter(t => {
+            const cat = TICKER_UNIVERSE[t]?.category;
+            return cat === 'us_top' || cat === 'kr_top';
+          });
         } else {
           // selected
-          candidateKeys = (selectedTickers && selectedTickers.length > 0) ? selectedTickers : allDbKeys;
+          candidateKeys = (selectedTickers && selectedTickers.length > 0) ? selectedTickers : Object.keys(TICKER_UNIVERSE);
         }
 
         const validTickers = [];
         const dailyReturns = {};
 
-        candidateKeys.forEach(rawT => {
-          const sym = MarketDataFetcher.resolveSymbol(rawT);
-          const pMap = dbPrices[sym] || dbPrices[rawT];
-          if (!pMap) return;
+        candidateKeys.forEach(t => {
+          const pArr = processedPrices[t];
+          if (!pArr || pArr.length <= N) return;
 
-          // 시작일과 종료일 시세가 모두 양수로 존재하는지 확인 (상장일 이전 구간 제외)
-          const firstP = pMap[dates[0]];
-          const lastP = pMap[dates[N]];
-          if (!firstP || firstP <= 0 || !lastP || lastP <= 0) return;
+          // 시작일과 종료일 시세가 모두 양수로 존재하는지 확인 (상장일 이전 및 미합성 구간 제외)
+          if (pArr[0] <= 0 || pArr[N] <= 0) return;
 
-          const pArr = new Float64Array(N + 1);
-          let lastVal = firstP;
           let isValid = true;
-
-          for (let i = 0; i <= N; i++) {
-            const v = pMap[dates[i]] || lastVal;
-            if (v <= 0) {
+          const rets = new Float64Array(N);
+          for (let i = 0; i < N; i++) {
+            if (pArr[i] <= 0 || pArr[i + 1] <= 0) {
               isValid = false;
               break;
             }
-            pArr[i] = v;
-            lastVal = v;
+            rets[i] = (pArr[i + 1] - pArr[i]) / pArr[i];
           }
 
           if (isValid) {
-            const rets = new Float64Array(N);
-            for (let i = 0; i < N; i++) {
-              rets[i] = (pArr[i + 1] - pArr[i]) / pArr[i];
-            }
-            if (!validTickers.includes(sym)) {
-              validTickers.push(sym);
-              dailyReturns[sym] = rets;
-            }
+            validTickers.push(t);
+            dailyReturns[t] = rets;
           }
         });
 
         if (validTickers.length < 2) {
           if (validTickers.length === 1) {
             const singleT = validTickers[0];
-            const dispName = (typeof TICKER_UNIVERSE !== 'undefined') ? (TICKER_UNIVERSE[singleT]?.name ? singleT : Object.keys(TICKER_UNIVERSE).find(k => TICKER_UNIVERSE[k].symbol === singleT) || singleT) : singleT;
             return {
               totalEvaluated: 1,
-              bestScore: { allocations: { [dispName]: 100 }, score: 50, cagr: 10, mdd: 20, sharpe: 0.5, sortino: 0.7, ulcer: 5 },
-              maxSharpe: { allocations: { [dispName]: 100 }, score: 50, cagr: 10, mdd: 20, sharpe: 0.5, sortino: 0.7, ulcer: 5 },
-              minMDD: { allocations: { [dispName]: 100 }, score: 50, cagr: 10, mdd: 20, sharpe: 0.5, sortino: 0.7, ulcer: 5 },
-              maxCAGR: { allocations: { [dispName]: 100 }, score: 50, cagr: 10, mdd: 20, sharpe: 0.5, sortino: 0.7, ulcer: 5 }
+              bestScore: { allocations: { [singleT]: 100 }, score: 50, cagr: 10, mdd: 20, sharpe: 0.5, sortino: 0.7, ulcer: 5 },
+              maxSharpe: { allocations: { [singleT]: 100 }, score: 50, cagr: 10, mdd: 20, sharpe: 0.5, sortino: 0.7, ulcer: 5 },
+              minMDD: { allocations: { [singleT]: 100 }, score: 50, cagr: 10, mdd: 20, sharpe: 0.5, sortino: 0.7, ulcer: 5 },
+              maxCAGR: { allocations: { [singleT]: 100 }, score: 50, cagr: 10, mdd: 20, sharpe: 0.5, sortino: 0.7, ulcer: 5 }
             };
           }
           return null;
@@ -2272,15 +2279,20 @@ class MultiFactorSynthesisEngine {
           const sharpe = vol > 0 ? (meanEx / vol) * Math.sqrt(252) : 0;
           const mdd = Math.abs(maxDD) * 100.0;
           const cagr = (Math.pow(Math.max(1e-6, cum), 1.0 / years) - 1.0) * 100.0;
-          stats.append ? stats.append({ t, sharpe, mdd, cagr }) : stats.push({ t, sharpe, mdd, cagr });
+          stats.push({ t, sharpe, mdd, cagr, volAnn: vol * Math.sqrt(252) });
         });
 
-        // 성장형 후보 (샤프 순)
-        const topGrowth = [...stats].sort((a, b) => b.sharpe - a.sharpe).slice(0, 16).map(x => x.t);
-        // 방어형 후보 (최저 MDD 순)
-        const topDefense = [...stats].sort((a, b) => a.mdd - b.mdd).slice(0, 8).map(x => x.t);
+        // 1) 샤프 지수 상위 12개 (위험대비 효율)
+        const topSharpe = [...stats].sort((a, b) => b.sharpe - a.sharpe).slice(0, 12).map(x => x.t);
+        // 2) 순수 연수익률 상위 8개 (최고수익 부문)
+        const topCAGR = [...stats].sort((a, b) => b.cagr - a.cagr).slice(0, 8).map(x => x.t);
+        // 3) 최저 낙폭 상위 8개 (철벽방어 부문)
+        const topMDD = [...stats].sort((a, b) => a.mdd - b.mdd).slice(0, 8).map(x => x.t);
+        // 4) 최저 변동성 상위 4개 (극저변동성)
+        const topVol = [...stats].sort((a, b) => a.volAnn - b.volAnn).slice(0, 4).map(x => x.t);
 
-        const candidates = Array.from(new Set([...topGrowth, ...topDefense, 'SPY', 'QQQ', 'TLT', 'GLD', 'SCHD'])).filter(t => validTickers.includes(t));
+        const anchors = ['SPY', 'QQQ', 'TLT', 'GLD', 'SCHD', 'SOXL', 'TQQQ', 'GGLL'];
+        const candidates = Array.from(new Set([...topSharpe, ...topCAGR, ...topMDD, ...topVol, ...anchors])).filter(t => validTickers.includes(t));
 
         const getDisplayName = (t) => {
           if (typeof TICKER_UNIVERSE !== 'undefined') {
@@ -2438,10 +2450,10 @@ class MultiFactorSynthesisEngine {
 
         if (results.length === 0) return null;
 
-        const bestScore = [...results].sort((a, b) => b.score - a.score)[0];
-        const maxSharpe = [...results].sort((a, b) => b.sharpe - a.sharpe)[0];
-        const minMDD = [...results].sort((a, b) => (a.mdd - b.mdd) || (b.sharpe - a.sharpe))[0];
-        const maxCAGR = [...results].sort((a, b) => b.cagr - a.cagr)[0];
+        const bestScore = [...results].sort((a, b) => (b.score - a.score) || (b.sharpe - a.sharpe) || (b.cagr - a.cagr))[0];
+        const maxSharpe = [...results].sort((a, b) => (b.sharpe - a.sharpe) || (b.sortino - a.sortino) || (b.score - a.score))[0];
+        const minMDD = [...results].sort((a, b) => (a.mdd - b.mdd) || (b.sharpe - a.sharpe) || (b.cagr - a.cagr))[0];
+        const maxCAGR = [...results].sort((a, b) => (b.cagr - a.cagr) || (a.mdd - b.mdd))[0];
 
         return {
           totalEvaluated: results.length,

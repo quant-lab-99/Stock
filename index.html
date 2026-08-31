@@ -2203,22 +2203,29 @@ class MultiFactorSynthesisEngine {
           const pMap = dbPrices[sym] || dbPrices[rawT];
           if (!pMap) return;
 
-          let presentCount = 0;
+          // 시작일과 종료일 시세가 모두 양수로 존재하는지 확인 (상장일 이전 구간 제외)
+          const firstP = pMap[dates[0]];
+          const lastP = pMap[dates[N]];
+          if (!firstP || firstP <= 0 || !lastP || lastP <= 0) return;
+
+          const pArr = new Float64Array(N + 1);
+          let lastVal = firstP;
+          let isValid = true;
+
           for (let i = 0; i <= N; i++) {
-            if (pMap[dates[i]] > 0) presentCount++;
+            const v = pMap[dates[i]] || lastVal;
+            if (v <= 0) {
+              isValid = false;
+              break;
+            }
+            pArr[i] = v;
+            lastVal = v;
           }
 
-          if (presentCount >= N * 0.85) {
+          if (isValid) {
             const rets = new Float64Array(N);
-            let lastVal = pMap[dates[0]] || 0;
             for (let i = 0; i < N; i++) {
-              const curVal = pMap[dates[i + 1]] || lastVal;
-              if (lastVal > 0 && curVal > 0) {
-                rets[i] = (curVal - lastVal) / lastVal;
-                lastVal = curVal;
-              } else {
-                rets[i] = 0.0;
-              }
+              rets[i] = (pArr[i + 1] - pArr[i]) / pArr[i];
             }
             if (!validTickers.includes(sym)) {
               validTickers.push(sym);
@@ -2245,31 +2252,35 @@ class MultiFactorSynthesisEngine {
         const years = Math.max(0.1, N / 252.0);
         const rfDaily = (avgRf / 100.0) / 252.0;
 
-        const individualStats = [];
+        // 단일 자산 사전 성과 및 위험 스크리닝
+        const stats = [];
         validTickers.forEach(t => {
           const r = dailyReturns[t];
-          let sumExcess = 0, sumSqExcess = 0;
+          let sumExcess = 0, sumSqExcess = 0, peak = 1.0, cum = 1.0, maxDD = 0.0;
           for (let i = 0; i < N; i++) {
             const ex = r[i] - rfDaily;
             sumExcess += ex;
             sumSqExcess += ex * ex;
+            cum *= (1.0 + r[i]);
+            if (cum > peak) peak = cum;
+            const dd = (cum - peak) / peak;
+            if (dd < maxDD) maxDD = dd;
           }
           const meanEx = sumExcess / N;
           const varEx = (sumSqExcess / N) - (meanEx * meanEx);
           const vol = Math.sqrt(Math.max(1e-12, varEx));
           const sharpe = vol > 0 ? (meanEx / vol) * Math.sqrt(252) : 0;
-          individualStats.push({ ticker: t, sharpe });
+          const mdd = Math.abs(maxDD) * 100.0;
+          const cagr = (Math.pow(Math.max(1e-6, cum), 1.0 / years) - 1.0) * 100.0;
+          stats.append ? stats.append({ t, sharpe, mdd, cagr }) : stats.push({ t, sharpe, mdd, cagr });
         });
 
-        individualStats.sort((a, b) => b.sharpe - a.sharpe);
-        const topCandidates = individualStats.slice(0, 18).map(x => x.ticker);
+        // 성장형 후보 (샤프 순)
+        const topGrowth = [...stats].sort((a, b) => b.sharpe - a.sharpe).slice(0, 16).map(x => x.t);
+        // 방어형 후보 (최저 MDD 순)
+        const topDefense = [...stats].sort((a, b) => a.mdd - b.mdd).slice(0, 8).map(x => x.t);
 
-        const anchors = ['SPY', 'QQQ', 'SPMO', 'SCHD', 'TLT', 'GLD', 'NVDA', 'AAPL', 'MSFT', '005930.KS'];
-        anchors.forEach(a => {
-          if (validTickers.includes(a) && !topCandidates.includes(a)) {
-            topCandidates.push(a);
-          }
-        });
+        const candidates = Array.from(new Set([...topGrowth, ...topDefense, 'SPY', 'QQQ', 'TLT', 'GLD', 'SCHD'])).filter(t => validTickers.includes(t));
 
         const getDisplayName = (t) => {
           if (typeof TICKER_UNIVERSE !== 'undefined') {
@@ -2375,10 +2386,10 @@ class MultiFactorSynthesisEngine {
         });
 
         // 2-Asset combinations
-        const step2 = topCandidates.length > 14 ? 10 : 5;
-        for (let i = 0; i < topCandidates.length; i++) {
-          for (let j = i + 1; j < topCandidates.length; j++) {
-            const t1 = topCandidates[i], t2 = topCandidates[j];
+        const step2 = candidates.length > 14 ? 10 : 5;
+        for (let i = 0; i < candidates.length; i++) {
+          for (let j = i + 1; j < candidates.length; j++) {
+            const t1 = candidates[i], t2 = candidates[j];
             for (let w = step2; w <= 100 - step2; w += step2) {
               evaluateAllocation({ [t1]: w, [t2]: 100 - w });
             }
@@ -2386,7 +2397,7 @@ class MultiFactorSynthesisEngine {
         }
 
         // 3-Asset combinations
-        const top14 = topCandidates.slice(0, 14);
+        const top14 = candidates.slice(0, 14);
         for (let i = 0; i < top14.length; i++) {
           for (let j = i + 1; j < top14.length; j++) {
             for (let k = j + 1; k < top14.length; k++) {
@@ -2403,7 +2414,7 @@ class MultiFactorSynthesisEngine {
         }
 
         // 4-Asset combinations for top core leaders
-        const top6 = topCandidates.slice(0, 6);
+        const top6 = candidates.slice(0, 6);
         if (top6.length >= 4) {
           for (let a = 0; a < top6.length; a++) {
             for (let b = a + 1; b < top6.length; b++) {
@@ -2429,7 +2440,7 @@ class MultiFactorSynthesisEngine {
 
         const bestScore = [...results].sort((a, b) => b.score - a.score)[0];
         const maxSharpe = [...results].sort((a, b) => b.sharpe - a.sharpe)[0];
-        const minMDD = [...results].sort((a, b) => a.mdd - b.mdd)[0];
+        const minMDD = [...results].sort((a, b) => (a.mdd - b.mdd) || (b.sharpe - a.sharpe))[0];
         const maxCAGR = [...results].sort((a, b) => b.cagr - a.cagr)[0];
 
         return {

@@ -403,7 +403,7 @@ const EMBEDDED_FF_FACTORS_1985_2026 = {"1985-01-02":[-0.0093,0.0074,0.0026,-0.00
               <span class="text-slate-400 font-medium">탐색 대상:</span>
               <select id="aiOptUniverseSelect" onchange="UIController.runAIOptimizer()" class="bg-slate-900 text-emerald-400 font-bold rounded border border-slate-700 px-2.5 py-1 text-xs">
                 <option value="all" selected>🌟 전체 50개 ETF 및 글로벌 주식 전수 탐색 (기본값)</option>
-                <option value="etf_only">🏛️ ETF 전용 유니버스 (지수/섹터/배당/채권/금)</option>
+                <option value="etf_only">🏛️ ETF 전용 유니버스 (지수/섹터/배당/채권/금/레버리지 전수)</option>
                 <option value="stocks_only">💻 개별 주식 유니버스 (미국 빅테크 + 한국 대표주)</option>
                 <option value="selected">📋 현재 체크박스 선택된 자산들만</option>
               </select>
@@ -2178,18 +2178,19 @@ class MultiFactorSynthesisEngine {
           ? EMBEDDED_OFFLINE_MARKET_DB.prices
           : {};
 
-        // 1. 모든 등록 티커의 원본 데이터셋 맵 생성 (백필 합성용)
+        // 1. 모든 DB 시세(지수 ^GSPC, ^NDX, ^SOX, ^TYX 등 포함) 및 등록 티커 원본 데이터셋 맵 생성 (완전 백필 합성)
         const rawDatasets = {};
+        Object.keys(dbPrices).forEach(k => {
+          rawDatasets[k] = {
+            priceMap: new Map(Object.entries(dbPrices[k] || {})),
+            divMap: new Map(Object.entries((EMBEDDED_OFFLINE_MARKET_DB.divs && EMBEDDED_OFFLINE_MARKET_DB.divs[k]) || {}))
+          };
+        });
         if (typeof TICKER_UNIVERSE !== 'undefined') {
           Object.keys(TICKER_UNIVERSE).forEach(ticker => {
             const sym = MarketDataFetcher.resolveSymbol(ticker);
-            const pMapObj = dbPrices[sym] || dbPrices[ticker];
-            const dMapObj = (EMBEDDED_OFFLINE_MARKET_DB.divs && (EMBEDDED_OFFLINE_MARKET_DB.divs[sym] || EMBEDDED_OFFLINE_MARKET_DB.divs[ticker])) || {};
-            if (pMapObj) {
-              rawDatasets[ticker] = {
-                priceMap: new Map(Object.entries(pMapObj)),
-                divMap: new Map(Object.entries(dMapObj))
-              };
+            if (rawDatasets[sym] && !rawDatasets[ticker]) {
+              rawDatasets[ticker] = rawDatasets[sym];
             }
           });
         }
@@ -2200,27 +2201,28 @@ class MultiFactorSynthesisEngine {
 
         let candidateKeys = [];
         if (universeType === 'all') {
-          candidateKeys = Object.keys(TICKER_UNIVERSE);
+          candidateKeys = Object.keys(TICKER_UNIVERSE).filter(t => t !== 'KOSPI');
         } else if (universeType === 'etf_only') {
           candidateKeys = Object.keys(TICKER_UNIVERSE).filter(t => {
             const cat = TICKER_UNIVERSE[t]?.category;
-            return cat === 'index_etf' || cat === 'growth_etf' || cat === 'dividend_etf' || cat === 'bond_gold_etf' || cat === 'leverage_etf';
+            return cat === 'index_etf' || cat === 'leveraged_etf' || cat === 'bond_commodity' || cat === 'growth_etf' || cat === 'dividend_etf' || cat === 'leverage_etf' || cat === 'bond_gold_etf';
           });
         } else if (universeType === 'stocks_only') {
           candidateKeys = Object.keys(TICKER_UNIVERSE).filter(t => {
             const cat = TICKER_UNIVERSE[t]?.category;
-            return cat === 'us_top' || cat === 'kr_top';
+            return (cat === 'us_top' || cat === 'kr_top') && t !== 'KOSPI';
           });
         } else {
           // selected
-          candidateKeys = (selectedTickers && selectedTickers.length > 0) ? selectedTickers : Object.keys(TICKER_UNIVERSE);
+          candidateKeys = (selectedTickers && selectedTickers.length > 0) ? selectedTickers : Object.keys(TICKER_UNIVERSE).filter(t => t !== 'KOSPI');
         }
 
         const validTickers = [];
         const dailyReturns = {};
 
         candidateKeys.forEach(t => {
-          const pArr = processedPrices[t];
+          const sym = MarketDataFetcher.resolveSymbol(t);
+          const pArr = processedPrices[t] || processedPrices[sym];
           if (!pArr || pArr.length <= N) return;
 
           // 시작일과 종료일 시세가 모두 양수로 존재하는지 확인 (상장일 이전 및 미합성 구간 제외)
@@ -2237,8 +2239,11 @@ class MultiFactorSynthesisEngine {
           }
 
           if (isValid) {
-            validTickers.push(t);
-            dailyReturns[t] = rets;
+            const finalKey = (typeof TICKER_UNIVERSE !== 'undefined' && TICKER_UNIVERSE[t]) ? t : (Object.keys(TICKER_UNIVERSE).find(k => TICKER_UNIVERSE[k].symbol === sym) || t);
+            if (!validTickers.includes(finalKey)) {
+              validTickers.push(finalKey);
+              dailyReturns[finalKey] = rets;
+            }
           }
         });
 
@@ -2291,7 +2296,18 @@ class MultiFactorSynthesisEngine {
         // 4) 최저 변동성 상위 4개 (극저변동성)
         const topVol = [...stats].sort((a, b) => a.volAnn - b.volAnn).slice(0, 4).map(x => x.t);
 
-        const anchors = ['SPY', 'QQQ', 'TLT', 'GLD', 'SCHD', 'SOXL', 'TQQQ', 'GGLL'];
+        // 유니버스별 맞춤형 핵심 앵커
+        let anchors = [];
+        if (universeType === 'etf_only') {
+          anchors = ['SPY', 'QQQ', 'TLT', 'GLD', 'SCHD', 'SOXL', 'TQQQ', 'GGLL', 'QLD', 'SMH', 'XLK'];
+        } else if (universeType === 'stocks_only') {
+          anchors = ['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'LLY', 'TSM', 'BRK-B', '삼성전자', 'SK하이닉스', '현대차', '셀트리온'];
+        } else if (universeType === 'selected') {
+          anchors = validTickers;
+        } else {
+          anchors = ['SPY', 'QQQ', 'TLT', 'GLD', 'SCHD', 'SOXL', 'TQQQ', 'GGLL', 'NVDA', 'AAPL', '삼성전자', 'SK하이닉스'];
+        }
+
         const candidates = Array.from(new Set([...topSharpe, ...topCAGR, ...topMDD, ...topVol, ...anchors])).filter(t => validTickers.includes(t));
 
         const getDisplayName = (t) => {

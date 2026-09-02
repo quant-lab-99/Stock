@@ -2170,9 +2170,27 @@ class MultiFactorSynthesisEngine {
     }
 
     class PortfolioOptimizerEngine {
-      static async optimize(dates, periodMonths, universeType = 'all', selectedTickers = [], avgRf = 3.5) {
+      static async optimize(dates, periodMonths, universeType = 'all', selectedTickers = [], avgRf = 3.5, investMode = 'dca') {
         const N = dates.length - 1;
         if (N < 15) return null;
+
+        const isDCA = (investMode === 'dca' || investMode === 'dynamicDCA');
+
+        // DCA용 월별 투자일자 인덱스 사전 추출
+        const monthlyIndices = [];
+        const monthlyDates = [];
+        let lastMonthStr = '';
+        for (let i = 0; i <= N; i++) {
+          const mStr = dates[i].substring(0, 7);
+          if (mStr !== lastMonthStr) {
+            monthlyIndices.push(i);
+            monthlyDates.push(dates[i]);
+            lastMonthStr = mStr;
+          }
+        }
+        const xirrDates = [...monthlyDates, dates[N]];
+        const dcaCashFlows = new Array(monthlyIndices.length).fill(1000.0);
+        const totalDCAInvested = monthlyIndices.length * 1000.0;
 
         const dbPrices = (typeof EMBEDDED_OFFLINE_MARKET_DB !== 'undefined' && EMBEDDED_OFFLINE_MARKET_DB.prices)
           ? EMBEDDED_OFFLINE_MARKET_DB.prices
@@ -2252,6 +2270,7 @@ class MultiFactorSynthesisEngine {
             const singleT = validTickers[0];
             return {
               totalEvaluated: 1,
+              investMode: isDCA ? 'dca' : 'lumpSum',
               bestScore: { allocations: { [singleT]: 100 }, score: 50, cagr: 10, mdd: 20, sharpe: 0.5, sortino: 0.7, ulcer: 5 },
               maxSharpe: { allocations: { [singleT]: 100 }, score: 50, cagr: 10, mdd: 20, sharpe: 0.5, sortino: 0.7, ulcer: 5 },
               minMDD: { allocations: { [singleT]: 100 }, score: 50, cagr: 10, mdd: 20, sharpe: 0.5, sortino: 0.7, ulcer: 5 },
@@ -2264,16 +2283,20 @@ class MultiFactorSynthesisEngine {
         const years = Math.max(0.1, N / 252.0);
         const rfDaily = (avgRf / 100.0) / 252.0;
 
-        // 단일 자산 사전 성과 및 위험 스크리닝
+        // 단일 자산 사전 성과 및 위험 스크리닝 (투자 모드 연동)
         const stats = {};
         validTickers.forEach(t => {
           const r = dailyReturns[t];
           let sumExcess = 0, sumSqExcess = 0, peak = 1.0, cum = 1.0, maxDD = 0.0;
+          const nav = isDCA ? new Float64Array(N + 1) : null;
+          if (isDCA) nav[0] = 1.0;
+
           for (let i = 0; i < N; i++) {
             const ex = r[i] - rfDaily;
             sumExcess += ex;
             sumSqExcess += ex * ex;
             cum *= (1.0 + r[i]);
+            if (isDCA) nav[i + 1] = cum;
             if (cum > peak) peak = cum;
             const dd = (cum - peak) / peak;
             if (dd < maxDD) maxDD = dd;
@@ -2283,8 +2306,27 @@ class MultiFactorSynthesisEngine {
           const vol = Math.sqrt(Math.max(1e-12, varEx));
           const sharpe = vol > 0 ? (meanEx / vol) * Math.sqrt(252) : 0;
           const mdd = Math.abs(maxDD) * 100.0;
-          const cagr = (Math.pow(Math.max(1e-6, cum), 1.0 / years) - 1.0) * 100.0;
-          stats[t] = { cagr, mdd, sharpe, volAnn: vol * Math.sqrt(252) };
+
+          let sortReturn = 0.0;
+          let effectiveReturn = 0.0;
+          if (isDCA) {
+            let totalShares = 0.0;
+            for (let m = 0; m < monthlyIndices.length; m++) {
+              const mIdx = monthlyIndices[m];
+              const navAtM = (mIdx === 0) ? 1.0 : nav[mIdx];
+              totalShares += 1000.0 / Math.max(1e-6, navAtM);
+            }
+            const finalDCAVal = totalShares * nav[N];
+            const multiple = Math.max(1e-6, finalDCAVal / totalDCAInvested);
+            sortReturn = multiple;
+            effectiveReturn = (Math.pow(multiple, 1.0 / Math.max(0.1, years * 0.55)) - 1.0) * 100.0;
+          } else {
+            const cagr = (Math.pow(Math.max(1e-6, cum), 1.0 / years) - 1.0) * 100.0;
+            sortReturn = cagr;
+            effectiveReturn = cagr;
+          }
+
+          stats[t] = { sortReturn, effectiveReturn, cagr: effectiveReturn, mdd, sharpe, volAnn: vol * Math.sqrt(252) };
         });
 
         const getDisplayName = (t) => {
@@ -2325,8 +2367,13 @@ class MultiFactorSynthesisEngine {
           let sumDDSq = 0.0;
           let negCount = 0;
 
+          const nav = isDCA ? new Float64Array(N + 1) : null;
+          if (isDCA) nav[0] = 1.0;
+
           for (let i = 0; i < N; i++) {
             cum *= (1.0 + rPort[i]);
+            if (isDCA) nav[i + 1] = cum;
+
             if (cum > peak) peak = cum;
             const dd = (cum - peak) / peak;
             if (dd < maxDD) maxDD = dd;
@@ -2342,7 +2389,27 @@ class MultiFactorSynthesisEngine {
             }
           }
 
-          const cagr = (Math.pow(Math.max(1e-6, cum), 1.0 / years) - 1.0) * 100.0;
+          let sortReturn = 0.0;
+          let effectiveReturn = 0.0;
+          let finalDCAVal = 0.0;
+
+          if (isDCA) {
+            let totalShares = 0.0;
+            for (let m = 0; m < monthlyIndices.length; m++) {
+              const mIdx = monthlyIndices[m];
+              const navAtM = (mIdx === 0) ? 1.0 : nav[mIdx];
+              totalShares += 1000.0 / Math.max(1e-6, navAtM);
+            }
+            finalDCAVal = totalShares * nav[N];
+            const multiple = Math.max(1e-6, finalDCAVal / totalDCAInvested);
+            sortReturn = multiple;
+            effectiveReturn = (Math.pow(multiple, 1.0 / Math.max(0.1, years * 0.55)) - 1.0) * 100.0;
+          } else {
+            const cagr = (Math.pow(Math.max(1e-6, cum), 1.0 / years) - 1.0) * 100.0;
+            sortReturn = cagr;
+            effectiveReturn = cagr;
+          }
+
           const mdd = Math.abs(maxDD) * 100.0;
           const ulcer = Math.sqrt(sumDDSq / N);
 
@@ -2355,20 +2422,20 @@ class MultiFactorSynthesisEngine {
           const sortino = downVolDaily > 0 ? (meanExcess / downVolDaily) * Math.sqrt(252) : 0;
 
           const omega = downVolDaily > 0 ? 1.0 + (meanExcess / downVolDaily) : 1.0;
-          const painRatio = ulcer > 0 ? Math.max(0, (cagr - avgRf) / ulcer) : 0;
+          const painRatio = ulcer > 0 ? Math.max(0, (effectiveReturn - avgRf) / ulcer) : 0;
           const cvar95 = volDaily * 1.645 * 100.0;
           const trackingError = volDaily * Math.sqrt(252) * 100.0;
 
           const tempRes = {
-            annualizedXIRR: cagr,
+            annualizedXIRR: effectiveReturn,
             sortino: Math.max(0, sortino),
             omega: Math.max(0, omega),
             painRatio: Math.max(0, painRatio),
             ulcerIndex: ulcer,
             cvar95: cvar95,
             twrMdd: mdd,
-            informationRatio: Math.max(0, (cagr - 10.0) / Math.max(1.0, trackingError)),
-            ff: { alpha: Math.max(-10, Math.min(25, cagr - 10.0)) },
+            informationRatio: Math.max(0, (effectiveReturn - 10.0) / Math.max(1.0, trackingError)),
+            ff: { alpha: Math.max(-10, Math.min(25, effectiveReturn - 10.0)) },
             trackingError: trackingError,
             monteCarlo: { p5: cum * 0.7, p50: cum }
           };
@@ -2378,7 +2445,9 @@ class MultiFactorSynthesisEngine {
           return {
             allocations: displayAllocMap,
             score,
-            cagr: Math.round(cagr * 100) / 100,
+            sortReturn,
+            cagr: Math.round(effectiveReturn * 100) / 100,
+            finalDCAVal,
             mdd: Math.round(mdd * 100) / 100,
             sharpe: Math.round(sharpe * 1000) / 1000,
             sortino: Math.round(sortino * 1000) / 1000,
@@ -2393,7 +2462,7 @@ class MultiFactorSynthesisEngine {
 
         const updateChampions = (res) => {
           if (!res) return;
-          if (!maxCAGR || res.cagr > maxCAGR.cagr || (res.cagr === maxCAGR.cagr && res.mdd < maxCAGR.mdd)) {
+          if (!maxCAGR || res.sortReturn > maxCAGR.sortReturn || (res.sortReturn === maxCAGR.sortReturn && res.mdd < maxCAGR.mdd)) {
             maxCAGR = res;
           }
           if (!minMDD || res.mdd < minMDD.mdd || (res.mdd === minMDD.mdd && res.sharpe > minMDD.sharpe)) {
@@ -2412,8 +2481,8 @@ class MultiFactorSynthesisEngine {
           updateChampions(evaluateAllocation({ [t]: 100 }));
         });
 
-        // 2) 전용 부문 1: 최고 연수익률 (Max CAGR) 전용 정밀 탐색기 (Top 10 assets 5% fine-grid)
-        const topCAGRAssets = Object.keys(stats).sort((a, b) => stats[b].cagr - stats[a].cagr).slice(0, 10);
+        // 2) 전용 부문 1: 최고 연수익률 (Max Return) 전용 정밀 탐색기 (Top 10 assets 5% fine-grid)
+        const topCAGRAssets = Object.keys(stats).sort((a, b) => stats[b].sortReturn - stats[a].sortReturn).slice(0, 10);
         for (let i = 0; i < topCAGRAssets.length; i++) {
           for (let j = i + 1; j < topCAGRAssets.length; j++) {
             const t1 = topCAGRAssets[i], t2 = topCAGRAssets[j];
@@ -2515,8 +2584,19 @@ class MultiFactorSynthesisEngine {
           }
         }
 
+        // 적립식(DCA) 모드인 경우 4대 챔피언에 대해 정밀 Brent-XIRR 실질 연수익률 확정 산출
+        if (isDCA) {
+          [bestScore, maxSharpe, minMDD, maxCAGR].forEach(champ => {
+            if (champ && champ.finalDCAVal > 0) {
+              const solvedXIRR = BrentXIRRSolver.computeXIRR(dcaCashFlows, champ.finalDCAVal, xirrDates);
+              champ.cagr = Math.round(solvedXIRR * 100) / 100;
+            }
+          });
+        }
+
         return {
           totalEvaluated,
+          investMode: isDCA ? 'dca' : 'lumpSum',
           bestScore,
           maxSharpe,
           minMDD,
@@ -3669,12 +3749,16 @@ class QuantBacktestEngine {
           return;
         }
 
+        const investMode = document.getElementById('investMode')?.value || 'dca';
+        const isDCA = (investMode === 'dca' || investMode === 'dynamicDCA');
+
         const optResult = await PortfolioOptimizerEngine.optimize(
           dates,
           periodMonths,
           universeType,
           this.selectedTickers,
-          3.5
+          3.5,
+          investMode
         );
 
         if (loading) loading.classList.add('hidden');
@@ -3687,7 +3771,7 @@ class QuantBacktestEngine {
         }
 
         if (subtitle) {
-          subtitle.innerHTML = `검증 구간: <span class="text-emerald-400 font-bold">${startMonth} ~ ${endMonth}</span> (${yearsStr}년) | 총 <span class="text-amber-400 font-bold">${optResult.totalEvaluated.toLocaleString()}개</span> 조합 시뮬레이션 완료`;
+          subtitle.innerHTML = `검증 구간: <span class="text-emerald-400 font-bold">${startMonth} ~ ${endMonth}</span> (${yearsStr}년) | 투자 방식: <span class="text-amber-400 font-bold">${isDCA ? '월 적립식 (DCA)' : '거치식 (Lump-Sum)'}</span> | 총 <span class="text-amber-400 font-bold">${optResult.totalEvaluated.toLocaleString()}개</span> 조합 시뮬레이션 완료`;
         }
 
         const renderCard = (title, icon, badgeClass, data, strategyName, isBest = false) => {
@@ -3721,7 +3805,7 @@ class QuantBacktestEngine {
 
               <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-slate-900 text-slate-300 text-[11px]">
                 <div class="bg-slate-900/60 p-2 rounded border border-slate-800/80">
-                  <span class="text-slate-500 block text-[10px]">연평균 복리수익률 (CAGR)</span>
+                  <span class="text-slate-500 block text-[10px]">${isDCA ? '적립식 실질 연수익률 (XIRR)' : '거치식 연평균 복리수익률 (CAGR)'}</span>
                   <span class="font-bold text-cyan-400 text-xs font-num">${data.cagr >= 0 ? '+' : ''}${data.cagr.toFixed(1)}%</span>
                 </div>
                 <div class="bg-slate-900/60 p-2 rounded border border-slate-800/80">

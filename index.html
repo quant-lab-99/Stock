@@ -2265,7 +2265,7 @@ class MultiFactorSynthesisEngine {
         const rfDaily = (avgRf / 100.0) / 252.0;
 
         // 단일 자산 사전 성과 및 위험 스크리닝
-        const stats = [];
+        const stats = {};
         validTickers.forEach(t => {
           const r = dailyReturns[t];
           let sumExcess = 0, sumSqExcess = 0, peak = 1.0, cum = 1.0, maxDD = 0.0;
@@ -2284,31 +2284,8 @@ class MultiFactorSynthesisEngine {
           const sharpe = vol > 0 ? (meanEx / vol) * Math.sqrt(252) : 0;
           const mdd = Math.abs(maxDD) * 100.0;
           const cagr = (Math.pow(Math.max(1e-6, cum), 1.0 / years) - 1.0) * 100.0;
-          stats.push({ t, sharpe, mdd, cagr, volAnn: vol * Math.sqrt(252) });
+          stats[t] = { cagr, mdd, sharpe, volAnn: vol * Math.sqrt(252) };
         });
-
-        // 1) 샤프 지수 상위 12개 (위험대비 효율)
-        const topSharpe = [...stats].sort((a, b) => b.sharpe - a.sharpe).slice(0, 12).map(x => x.t);
-        // 2) 순수 연수익률 상위 8개 (최고수익 부문)
-        const topCAGR = [...stats].sort((a, b) => b.cagr - a.cagr).slice(0, 8).map(x => x.t);
-        // 3) 최저 낙폭 상위 8개 (철벽방어 부문)
-        const topMDD = [...stats].sort((a, b) => a.mdd - b.mdd).slice(0, 8).map(x => x.t);
-        // 4) 최저 변동성 상위 4개 (극저변동성)
-        const topVol = [...stats].sort((a, b) => a.volAnn - b.volAnn).slice(0, 4).map(x => x.t);
-
-        // 유니버스별 맞춤형 핵심 앵커
-        let anchors = [];
-        if (universeType === 'etf_only') {
-          anchors = ['SPY', 'QQQ', 'TLT', 'GLD', 'SCHD', 'SOXL', 'TQQQ', 'GGLL', 'QLD', 'SMH', 'XLK'];
-        } else if (universeType === 'stocks_only') {
-          anchors = ['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'LLY', 'TSM', 'BRK-B', '삼성전자', 'SK하이닉스', '현대차', '셀트리온'];
-        } else if (universeType === 'selected') {
-          anchors = validTickers;
-        } else {
-          anchors = ['SPY', 'QQQ', 'TLT', 'GLD', 'SCHD', 'SOXL', 'TQQQ', 'GGLL', 'NVDA', 'AAPL', '삼성전자', 'SK하이닉스'];
-        }
-
-        const candidates = Array.from(new Set([...topSharpe, ...topCAGR, ...topMDD, ...topVol, ...anchors])).filter(t => validTickers.includes(t));
 
         const getDisplayName = (t) => {
           if (typeof TICKER_UNIVERSE !== 'undefined') {
@@ -2320,9 +2297,10 @@ class MultiFactorSynthesisEngine {
           return t;
         };
 
-        const results = [];
+        let totalEvaluated = 0;
 
         const evaluateAllocation = (allocMap) => {
+          totalEvaluated++;
           const keys = Object.keys(allocMap);
           const rPort = new Float64Array(N);
           const displayAllocMap = {};
@@ -2332,7 +2310,7 @@ class MultiFactorSynthesisEngine {
             const w = allocMap[sym] / 100.0;
             displayAllocMap[getDisplayName(sym)] = allocMap[sym];
             const rAsset = dailyReturns[sym];
-            if (!rAsset) return;
+            if (!rAsset) return null;
             for (let i = 0; i < N; i++) {
               rPort[i] += w * rAsset[i];
             }
@@ -2397,7 +2375,7 @@ class MultiFactorSynthesisEngine {
 
           const score = QuantScoreEngine.calculateScore(tempRes, periodMonths, avgRf, 'BALANCED');
 
-          results.push({
+          return {
             allocations: displayAllocMap,
             score,
             cagr: Math.round(cagr * 100) / 100,
@@ -2405,74 +2383,140 @@ class MultiFactorSynthesisEngine {
             sharpe: Math.round(sharpe * 1000) / 1000,
             sortino: Math.round(sortino * 1000) / 1000,
             ulcer: Math.round(ulcer * 100) / 100
-          });
+          };
         };
 
-        // 1-Asset baseline
+        let bestScore = null;
+        let maxSharpe = null;
+        let minMDD = null;
+        let maxCAGR = null;
+
+        const updateChampions = (res) => {
+          if (!res) return;
+          if (!maxCAGR || res.cagr > maxCAGR.cagr || (res.cagr === maxCAGR.cagr && res.mdd < maxCAGR.mdd)) {
+            maxCAGR = res;
+          }
+          if (!minMDD || res.mdd < minMDD.mdd || (res.mdd === minMDD.mdd && res.sharpe > minMDD.sharpe)) {
+            minMDD = res;
+          }
+          if (!maxSharpe || res.sharpe > maxSharpe.sharpe || (res.sharpe === maxSharpe.sharpe && res.sortino > maxSharpe.sortino)) {
+            maxSharpe = res;
+          }
+          if (!bestScore || res.score > bestScore.score || (res.score === bestScore.score && res.sharpe > bestScore.sharpe)) {
+            bestScore = res;
+          }
+        };
+
+        // 1) 모든 단일 자산 (100% 몰빵) 전수 평가
         validTickers.forEach(t => {
-          evaluateAllocation({ [t]: 100 });
+          updateChampions(evaluateAllocation({ [t]: 100 }));
         });
 
-        // 2-Asset combinations
-        const step2 = candidates.length > 14 ? 10 : 5;
-        for (let i = 0; i < candidates.length; i++) {
-          for (let j = i + 1; j < candidates.length; j++) {
-            const t1 = candidates[i], t2 = candidates[j];
-            for (let w = step2; w <= 100 - step2; w += step2) {
-              evaluateAllocation({ [t1]: w, [t2]: 100 - w });
+        // 2) 전용 부문 1: 최고 연수익률 (Max CAGR) 전용 정밀 탐색기 (Top 10 assets 5% fine-grid)
+        const topCAGRAssets = Object.keys(stats).sort((a, b) => stats[b].cagr - stats[a].cagr).slice(0, 10);
+        for (let i = 0; i < topCAGRAssets.length; i++) {
+          for (let j = i + 1; j < topCAGRAssets.length; j++) {
+            const t1 = topCAGRAssets[i], t2 = topCAGRAssets[j];
+            for (let w = 5; w <= 95; w += 5) {
+              updateChampions(evaluateAllocation({ [t1]: w, [t2]: 100 - w }));
+            }
+          }
+        }
+        const topCAGR6 = topCAGRAssets.slice(0, 6);
+        for (let i = 0; i < topCAGR6.length; i++) {
+          for (let j = i + 1; j < topCAGR6.length; j++) {
+            for (let k = j + 1; k < topCAGR6.length; k++) {
+              const t1 = topCAGR6[i], t2 = topCAGR6[j], t3 = topCAGR6[k];
+              for (let w1 = 10; w1 <= 80; w1 += 10) {
+                for (let w2 = 10; w2 <= 90 - w1; w2 += 10) {
+                  const w3 = 100 - w1 - w2;
+                  if (w3 > 0) updateChampions(evaluateAllocation({ [t1]: w1, [t2]: w2, [t3]: w3 }));
+                }
+              }
             }
           }
         }
 
-        // 3-Asset combinations
-        const top14 = candidates.slice(0, 14);
-        for (let i = 0; i < top14.length; i++) {
-          for (let j = i + 1; j < top14.length; j++) {
-            for (let k = j + 1; k < top14.length; k++) {
-              const t1 = top14[i], t2 = top14[j], t3 = top14[k];
-              for (let w1 = 15; w1 <= 70; w1 += 15) {
+        // 3) 전용 부문 2: 철벽 방어 최저 낙폭 (Min MDD) 전용 정밀 탐색기 (Top 10 lowest MDD 5% fine-grid)
+        const topMDDAssets = Object.keys(stats).sort((a, b) => stats[a].mdd - stats[b].mdd).slice(0, 10);
+        ['TLT', 'GLD', 'SCHD', 'JEPI'].forEach(anc => {
+          if (validTickers.includes(anc) && !topMDDAssets.includes(anc)) topMDDAssets.push(anc);
+        });
+        for (let i = 0; i < topMDDAssets.length; i++) {
+          for (let j = i + 1; j < topMDDAssets.length; j++) {
+            const t1 = topMDDAssets[i], t2 = topMDDAssets[j];
+            for (let w = 5; w <= 95; w += 5) {
+              updateChampions(evaluateAllocation({ [t1]: w, [t2]: 100 - w }));
+            }
+          }
+        }
+        const topMDD6 = topMDDAssets.slice(0, 6);
+        for (let i = 0; i < topMDD6.length; i++) {
+          for (let j = i + 1; j < topMDD6.length; j++) {
+            for (let k = j + 1; k < topMDD6.length; k++) {
+              const t1 = topMDD6[i], t2 = topMDD6[j], t3 = topMDD6[k];
+              for (let w1 = 10; w1 <= 80; w1 += 10) {
+                for (let w2 = 10; w2 <= 90 - w1; w2 += 10) {
+                  const w3 = 100 - w1 - w2;
+                  if (w3 > 0) updateChampions(evaluateAllocation({ [t1]: w1, [t2]: w2, [t3]: w3 }));
+                }
+              }
+            }
+          }
+        }
+
+        // 4) 전용 부문 3: 최대 샤프 지수 (Max Sharpe) 전용 정밀 탐색기
+        const topSharpeAssets = Object.keys(stats).sort((a, b) => stats[b].sharpe - stats[a].sharpe).slice(0, 10);
+        for (let i = 0; i < topSharpeAssets.length; i++) {
+          for (let j = i + 1; j < topSharpeAssets.length; j++) {
+            const t1 = topSharpeAssets[i], t2 = topSharpeAssets[j];
+            for (let w = 5; w <= 95; w += 5) {
+              updateChampions(evaluateAllocation({ [t1]: w, [t2]: 100 - w }));
+            }
+          }
+        }
+        const topSharpe6 = topSharpeAssets.slice(0, 6);
+        for (let i = 0; i < topSharpe6.length; i++) {
+          for (let j = i + 1; j < topSharpe6.length; j++) {
+            for (let k = j + 1; k < topSharpe6.length; k++) {
+              const t1 = topSharpe6[i], t2 = topSharpe6[j], t3 = topSharpe6[k];
+              for (let w1 = 10; w1 <= 80; w1 += 10) {
+                for (let w2 = 10; w2 <= 90 - w1; w2 += 10) {
+                  const w3 = 100 - w1 - w2;
+                  if (w3 > 0) updateChampions(evaluateAllocation({ [t1]: w1, [t2]: w2, [t3]: w3 }));
+                }
+              }
+            }
+          }
+        }
+
+        // 5) 전용 부문 4: 최고 종합점수 (Max Quant Score) 전용 밸런스 풀
+        const balancedPool = Array.from(new Set([...topSharpeAssets.slice(0, 8), ...topCAGRAssets.slice(0, 6), ...topMDDAssets.slice(0, 6)])).filter(t => validTickers.includes(t));
+        for (let i = 0; i < balancedPool.length; i++) {
+          for (let j = i + 1; j < balancedPool.length; j++) {
+            const t1 = balancedPool[i], t2 = balancedPool[j];
+            for (let w = 10; w <= 90; w += 10) {
+              updateChampions(evaluateAllocation({ [t1]: w, [t2]: 100 - w }));
+            }
+          }
+        }
+        const balanced12 = balancedPool.slice(0, 12);
+        for (let i = 0; i < balanced12.length; i++) {
+          for (let j = i + 1; j < balanced12.length; j++) {
+            for (let k = j + 1; k < balanced12.length; k++) {
+              const t1 = balanced12[i], t2 = balanced12[j], t3 = balanced12[k];
+              for (let w1 = 15; w1 <= 75; w1 += 15) {
                 for (let w2 = 15; w2 <= 85 - w1; w2 += 15) {
                   const w3 = 100 - w1 - w2;
-                  if (w3 <= 0) continue;
-                  evaluateAllocation({ [t1]: w1, [t2]: w2, [t3]: w3 });
+                  if (w3 > 0) updateChampions(evaluateAllocation({ [t1]: w1, [t2]: w2, [t3]: w3 }));
                 }
               }
             }
           }
         }
-
-        // 4-Asset combinations for top core leaders
-        const top6 = candidates.slice(0, 6);
-        if (top6.length >= 4) {
-          for (let a = 0; a < top6.length; a++) {
-            for (let b = a + 1; b < top6.length; b++) {
-              for (let c = b + 1; c < top6.length; c++) {
-                for (let d = c + 1; d < top6.length; d++) {
-                  const t1 = top6[a], t2 = top6[b], t3 = top6[c], t4 = top6[d];
-                  for (let w1 = 15; w1 <= 55; w1 += 15) {
-                    for (let w2 = 15; w2 <= 70 - w1; w2 += 15) {
-                      for (let w3 = 15; w3 <= 85 - w1 - w2; w3 += 15) {
-                        const w4 = 100 - w1 - w2 - w3;
-                        if (w4 <= 0) continue;
-                        evaluateAllocation({ [t1]: w1, [t2]: w2, [t3]: w3, [t4]: w4 });
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-
-        if (results.length === 0) return null;
-
-        const bestScore = [...results].sort((a, b) => (b.score - a.score) || (b.sharpe - a.sharpe) || (b.cagr - a.cagr))[0];
-        const maxSharpe = [...results].sort((a, b) => (b.sharpe - a.sharpe) || (b.sortino - a.sortino) || (b.score - a.score))[0];
-        const minMDD = [...results].sort((a, b) => (a.mdd - b.mdd) || (b.sharpe - a.sharpe) || (b.cagr - a.cagr))[0];
-        const maxCAGR = [...results].sort((a, b) => (b.cagr - a.cagr) || (a.mdd - b.mdd))[0];
 
         return {
-          totalEvaluated: results.length,
+          totalEvaluated,
           bestScore,
           maxSharpe,
           minMDD,
@@ -3677,7 +3721,7 @@ class QuantBacktestEngine {
 
               <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-slate-900 text-slate-300 text-[11px]">
                 <div class="bg-slate-900/60 p-2 rounded border border-slate-800/80">
-                  <span class="text-slate-500 block text-[10px]">연수익률 (XIRR)</span>
+                  <span class="text-slate-500 block text-[10px]">연평균 복리수익률 (CAGR)</span>
                   <span class="font-bold text-cyan-400 text-xs font-num">${data.cagr >= 0 ? '+' : ''}${data.cagr.toFixed(1)}%</span>
                 </div>
                 <div class="bg-slate-900/60 p-2 rounded border border-slate-800/80">

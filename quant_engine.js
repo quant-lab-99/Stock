@@ -16,7 +16,7 @@ const GLOBAL_QUANT_CONFIG = Object.freeze({
   TRADING_DAYS: 252,
   MC_ITERATIONS: 10000,
   AVAIL_TOLERANCE_DAYS: 10,       // 시작일 대비 데이터 시작 허용 오차(일)
-  CORS_WORKER_PROXY: 'https://my-yahoo-proxy.rlfhdzk.workers.dev/?url='
+  CORS_WORKER_PROXY: 'https://my-yahoo-proxy.wodyd9292.workers.dev/?url='
 });
 
 /* ----------------------------------------------------------------------------

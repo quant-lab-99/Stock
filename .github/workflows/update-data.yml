@@ -1,0 +1,76 @@
+# 시세·팩터 데이터 자동 갱신
+#  - 매주 토요일 07:00 KST(금요일 미국 장 마감 후) 실행 + Actions 탭에서 수동 실행 가능
+#  - 수신 실패 종목은 기존 데이터를 유지하므로 사이트가 깨지지 않습니다
+#  - 주간 사이 빠진 날짜는 앱이 실행 시 Yahoo 에서 자동 보충합니다
+name: Update market & factor data
+
+on:
+  schedule:
+    - cron: "0 22 * * 5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+
+concurrency:
+  group: update-data
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install "yfinance>=0.2.40"
+
+      - name: Build offline_market_db.js (Yahoo Finance)
+        id: market
+        continue-on-error: true
+        env:
+          PYTHONIOENCODING: utf-8
+        run: python scripts/build_market_db.py
+
+      - name: Build quant_factor_db.js (Kenneth R. French)
+        id: factor
+        continue-on-error: true
+        env:
+          PYTHONIOENCODING: utf-8
+        run: python scripts/build_factor_db.py
+
+      - name: Commit & push if changed
+        id: commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add offline_market_db.js quant_factor_db.js
+          if git diff --cached --quiet; then
+            echo "변경 없음"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            git commit -m "data: 자동 갱신 $(date -u +%F)"
+            git push
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Request GitHub Pages rebuild
+        if: steps.commit.outputs.changed == 'true'
+        continue-on-error: true
+        run: |
+          curl -fsS -X POST \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/pages/builds"
+
+      - name: Fail if both builders failed
+        if: steps.market.outcome == 'failure' && steps.factor.outcome == 'failure'
+        run: |
+          echo "시세·팩터 데이터 모두 갱신 실패 — 로그를 확인하세요."
+          exit 1

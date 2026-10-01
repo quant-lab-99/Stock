@@ -1,5 +1,5 @@
 /* ============================================================================
- * quant_engine.js — ETF 적립식 백테스트 엔진 v16.0
+ * quant_engine.js — ETF 적립식 백테스트 엔진 v16.1 (수정 패치 반영본)
  *  - 데이터 수집/정규화(원주가 + 배당 분리), 백필 합성, 포트폴리오 시뮬레이터,
  *    성과/위험 분석, Fama-French 회귀, 몬테카를로, 퀀트 점수, AI 최적화기
  *  - 의존: quant_factor_db.js (QUANT_FACTOR_DB), offline_market_db.js (EMBEDDED_OFFLINE_MARKET_DB)
@@ -7,15 +7,15 @@
 'use strict';
 
 const GLOBAL_QUANT_CONFIG = Object.freeze({
-  TAX_RATE: 0.22,                 // 해외주식 양도소득세 (지방세 포함)
-  TAX_ALLOWANCE_KRW: 2500000,     // 연 기본공제
-  US_DIV_WITHHOLDING: 0.15,       // 미국 배당 원천징수
-  KR_DIV_TAX: 0.154,              // 국내 배당소득세
-  KR_STOCK_SELL_TAX: 0.0020,      // 코스피 매도 거래세(농특세 포함, 2026년 기준) — 세율 변경 시 조정
+  TAX_RATE: 0.22,                  // 해외주식 양도소득세 (지방세 포함)
+  TAX_ALLOWANCE_KRW: 2500000,      // 연 기본공제
+  US_DIV_WITHHOLDING: 0.15,        // 미국 배당 원천징수
+  KR_DIV_TAX: 0.154,               // 국내 배당소득세
+  KR_STOCK_SELL_TAX: 0.0020,       // 코스피 매도 거래세(농특세 포함, 2026년 기준)
   EPS: 1e-9,
   TRADING_DAYS: 252,
   MC_ITERATIONS: 10000,
-  AVAIL_TOLERANCE_DAYS: 10,       // 시작일 대비 데이터 시작 허용 오차(일)
+  AVAIL_TOLERANCE_DAYS: 10,        // 시작일 대비 데이터 시작 허용 오차(일)
   CORS_WORKER_PROXY: 'https://my-yahoo-proxy.wodyd9292.workers.dev/?url='
 });
 
@@ -107,7 +107,6 @@ class QuantUtils {
     return '"' + s.replace(/"/g, '""') + '"';
   }
 
-  /** arr[i] >= x 인 첫 인덱스 */
   static lowerBound(arr, x) {
     let lo = 0, hi = arr.length;
     while (lo < hi) {
@@ -117,7 +116,6 @@ class QuantUtils {
     return lo;
   }
 
-  /** arr[i] <= x 인 마지막 인덱스 (-1: 없음) */
   static lastIndexLE(arr, x) {
     let lo = 0, hi = arr.length;
     while (lo < hi) {
@@ -136,8 +134,6 @@ class QuantUtils {
 
 /* ----------------------------------------------------------------------------
  * 자산 유니버스
- *  proxyType: direct | index_tracking | leveraged | bond_duration | factor | index_direct
- *  inceptDate: 실제 데이터 시작(월), backfillMinDate: 합성 포함 최초 선택 가능 월
  * -------------------------------------------------------------------------- */
 const TICKER_UNIVERSE = {
   // ① 대표 지수 & 배당/섹터 ETF (USD)
@@ -155,7 +151,7 @@ const TICKER_UNIVERSE = {
   'XLE':   { name: 'Energy Select Sector SPDR (에너지)', category: 'index_etf', currency: 'USD', base: null, leverage: 1, fee: 0.0008, inceptDate: '1999-01', allowBackfill: false, backfillMinDate: '1999-01', proxyType: 'direct' },
   'ARKK':  { name: 'ARK Innovation ETF (파괴적 혁신)', category: 'index_etf', currency: 'USD', base: null, leverage: 1, fee: 0.0075, inceptDate: '2014-11', allowBackfill: false, backfillMinDate: '2014-11', proxyType: 'direct' },
 
-  // ② 레버리지 & 인버스 ETF (기초자산 총수익 × 배율 − 조달비용 − 보수)
+  // ② 레버리지 & 인버스 ETF
   'QLD':   { name: 'ProShares Ultra QQQ (나스닥 2배)', category: 'leveraged_etf', currency: 'USD', base: 'QQQ', leverage: 2, fee: 0.0095, inceptDate: '2006-07', allowBackfill: true, backfillMinDate: '1985-01', proxyType: 'leveraged', swapSpread: 0.0045, trackingError: 0.0020 },
   'TQQQ':  { name: 'ProShares UltraPro QQQ (나스닥 3배)', category: 'leveraged_etf', currency: 'USD', base: 'QQQ', leverage: 3, fee: 0.0084, inceptDate: '2010-03', allowBackfill: true, backfillMinDate: '1985-01', proxyType: 'leveraged', swapSpread: 0.0055, trackingError: 0.0035 },
   'SSO':   { name: 'ProShares Ultra S&P 500 (S&P 2배)', category: 'leveraged_etf', currency: 'USD', base: 'SPY', leverage: 2, fee: 0.0089, inceptDate: '2006-07', allowBackfill: true, backfillMinDate: '1985-01', proxyType: 'leveraged', swapSpread: 0.0040, trackingError: 0.0018 },
@@ -169,7 +165,7 @@ const TICKER_UNIVERSE = {
   'TLT':   { name: 'iShares 20+ Year Treasury (미국 장기채)', category: 'bond_commodity', currency: 'USD', base: '^TYX', leverage: 1, fee: 0.0015, inceptDate: '2002-08', allowBackfill: true, backfillMinDate: '1985-01', proxyType: 'bond_duration' },
   'GLD':   { name: 'SPDR Gold Shares (금 현물)', category: 'bond_commodity', currency: 'USD', base: null, leverage: 1, fee: 0.0040, inceptDate: '2004-12', allowBackfill: false, backfillMinDate: '2004-12', proxyType: 'direct' },
 
-  // ④ 미국 메가캡 (개별 주식: 상장일 이전 백필 금지)
+  // ④ 미국 메가캡
   'AAPL':  { name: '애플 (Apple)', category: 'us_top', currency: 'USD', base: null, leverage: 1, fee: 0, inceptDate: '1985-01', allowBackfill: false, backfillMinDate: '1985-01', proxyType: 'direct' },
   'MSFT':  { name: '마이크로소프트 (Microsoft)', category: 'us_top', currency: 'USD', base: null, leverage: 1, fee: 0, inceptDate: '1986-04', allowBackfill: false, backfillMinDate: '1986-04', proxyType: 'direct' },
   'NVDA':  { name: '엔비디아 (NVIDIA)', category: 'us_top', currency: 'USD', base: null, leverage: 1, fee: 0, inceptDate: '1999-02', allowBackfill: false, backfillMinDate: '1999-02', proxyType: 'direct' },
@@ -182,8 +178,8 @@ const TICKER_UNIVERSE = {
   'TSM':   { name: 'TSMC (대만반도체 ADR)', category: 'us_top', currency: 'USD', base: null, leverage: 1, fee: 0, inceptDate: '1997-11', allowBackfill: false, backfillMinDate: '1997-11', proxyType: 'direct' },
   'AVGO':  { name: '브로드컴 (Broadcom)', category: 'us_top', currency: 'USD', base: null, leverage: 1, fee: 0, inceptDate: '2009-09', allowBackfill: false, backfillMinDate: '2009-09', proxyType: 'direct' },
 
-  // ⑤ 한국 KOSPI & 대표주 (KRW)
-  'KOSPI':            { name: '코스피 지수 (인덱스펀드 근사: 추정 배당 포함)', symbol: '^KS11', category: 'kr_top', currency: 'KRW', base: null, leverage: 1, fee: 0.0005, inceptDate: '1997-01', allowBackfill: false, backfillMinDate: '1997-01', proxyType: 'index_direct' },
+  // ⑤ 한국 KOSPI & 대표주
+  'KOSPI':             { name: '코스피 지수 (인덱스펀드 근사: 추정 배당 포함)', symbol: '^KS11', category: 'kr_top', currency: 'KRW', base: null, leverage: 1, fee: 0.0005, inceptDate: '1997-01', allowBackfill: false, backfillMinDate: '1997-01', proxyType: 'index_direct' },
   '삼성전자':          { name: '삼성전자 (005930)', symbol: '005930.KS', category: 'kr_top', currency: 'KRW', base: null, leverage: 1, fee: 0, inceptDate: '2000-01', allowBackfill: false, backfillMinDate: '2000-01', proxyType: 'direct' },
   'SK하이닉스':        { name: 'SK하이닉스 (000660)', symbol: '000660.KS', category: 'kr_top', currency: 'KRW', base: null, leverage: 1, fee: 0, inceptDate: '2003-01', allowBackfill: false, backfillMinDate: '2003-01', proxyType: 'direct' },
   'LG에너지솔루션':    { name: 'LG에너지솔루션 (373220)', symbol: '373220.KS', category: 'kr_top', currency: 'KRW', base: null, leverage: 1, fee: 0, inceptDate: '2022-02', allowBackfill: false, backfillMinDate: '2022-02', proxyType: 'direct' },
@@ -196,7 +192,6 @@ const TICKER_UNIVERSE = {
   '카카오':            { name: '카카오 (035720)', symbol: '035720.KS', category: 'kr_top', currency: 'KRW', base: null, leverage: 1, fee: 0, inceptDate: '2014-10', allowBackfill: false, backfillMinDate: '2014-10', proxyType: 'direct' }
 };
 
-/** 가격지수(배당 미포함)의 추정 배당수익률 — 분기말 합성 분배금으로 총수익 보정 (근사치) */
 const SP500_DIV_YIELD_BY_YEAR = {
   1985: 0.040, 1986: 0.035, 1987: 0.032, 1988: 0.036, 1989: 0.033, 1990: 0.036, 1991: 0.032, 1992: 0.029,
   1993: 0.028, 1994: 0.028, 1995: 0.025, 1996: 0.021, 1997: 0.017, 1998: 0.014, 1999: 0.012, 2000: 0.012,
@@ -214,7 +209,6 @@ const INDEX_DIVIDEND_YIELD = {
   '^KS11': () => 0.017
 };
 
-/** 2003-12 이전 USD/KRW 월평균 근사치 (한국은행 공표치 기반 근사, ±3% 오차 가능) — 선형 보간 */
 const FX_PRE2004_ANCHORS = [
   ['1985-01-15', 830], ['1985-06-15', 880], ['1985-12-15', 890], ['1986-06-15', 885], ['1986-12-15', 862],
   ['1987-06-15', 805], ['1987-12-15', 795], ['1988-06-15', 730], ['1988-12-15', 685], ['1989-06-15', 668],
@@ -233,7 +227,6 @@ const FX_PRE2004_ANCHORS = [
   ['2003-06-15', 1195], ['2003-09-15', 1170], ['2003-11-28', 1195]
 ];
 
-/** Fama-French 무위험금리 미보유 구간용 연도별 3개월 T-Bill 근사(%) */
 const FALLBACK_TBILL_PCT = {
   1985: 7.5, 1986: 6.0, 1987: 5.8, 1988: 6.7, 1989: 8.1, 1990: 7.5, 1991: 5.4, 1992: 3.4, 1993: 3.0, 1994: 4.3,
   1995: 5.5, 1996: 5.0, 1997: 5.1, 1998: 4.8, 1999: 4.7, 2000: 5.8, 2001: 3.4, 2002: 1.6, 2003: 1.0, 2004: 1.4,
@@ -242,7 +235,6 @@ const FALLBACK_TBILL_PCT = {
   2025: 4.2, 2026: 3.9
 };
 
-/** 팩터 모사(factor-mimicking) 백필 모델 */
 const FACTOR_MODELS = {
   LARGE_MOMENTUM: {
     label: 'Fama-French 대형 모멘텀 포트폴리오(BIG HiPRIOR) + 시장(MKT-RF) 회귀',
@@ -259,7 +251,7 @@ const FACTOR_MODELS = {
 };
 
 /* ----------------------------------------------------------------------------
- * Fama-French 데이터 (quant_factor_db.js)
+ * Fama-French 데이터 및 금리
  * -------------------------------------------------------------------------- */
 class FactorData {
   static _idx = null;
@@ -311,7 +303,6 @@ class FactorData {
 }
 
 class HistoricalInterestRates {
-  /** 일간 무위험수익률 (Fama-French RF = 1개월 T-Bill, 미보유 시 연도별 근사) */
   static rfDaily(dateStr) {
     const v = FactorData.rfDaily(dateStr);
     if (v !== null && !isNaN(v)) return v;
@@ -385,7 +376,7 @@ class QuantDataCache {
 }
 
 /* ----------------------------------------------------------------------------
- * 가격 정규화: 모든 소스를 "원주가(분할만 반영) + 배당(주당 현금)" 형태로 통일
+ * 가격 정규화
  * -------------------------------------------------------------------------- */
 class PriceSeriesNormalizer {
   static sortedEntries(map) {
@@ -394,7 +385,6 @@ class PriceSeriesNormalizer {
       .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
   }
 
-  /** 고립된 스파이크(단일 이상치) 제거 */
   static sanitize(entries) {
     const out = [];
     for (let i = 0; i < entries.length; i++) {
@@ -409,7 +399,6 @@ class PriceSeriesNormalizer {
     return out;
   }
 
-  /** 배당일을 가장 가까운 이후 거래일 인덱스로 정렬 */
   static alignDivs(dates, divMap) {
     const out = new Map();
     if (!divMap) return out;
@@ -423,10 +412,6 @@ class PriceSeriesNormalizer {
     return out;
   }
 
-  /**
-   * 배당 반영 수정주가(adjclose) → 원주가 역산.
-   * Yahoo/CRSP 방식 누적계수 f: adj = raw × f, 배당일 e에서 raw[e-1] = adj[e-1]/f + D
-   */
   static fromAdjusted(adjMap, divMap) {
     const e = this.sanitize(this.sortedEntries(adjMap));
     const dates = e.map(x => x[0]);
@@ -449,7 +434,6 @@ class PriceSeriesNormalizer {
     return { priceMap: new Map(dates.map((d, i) => [d, raw[i]])), divMap: cleanDivs };
   }
 
-  /** 이미 원주가인 시계열: 이상치/비현실적 배당 제거 */
   static fromRaw(rawMap, divMap) {
     const e = this.sanitize(this.sortedEntries(rawMap));
     const dates = e.map(x => x[0]);
@@ -480,7 +464,7 @@ class PriceSeriesNormalizer {
 }
 
 /* ----------------------------------------------------------------------------
- * 시세 수집 (오프라인 DB → 로컬 API → Polygon/Finnhub → Yahoo 프록시)
+ * 시세 수집
  * -------------------------------------------------------------------------- */
 class MarketDataFetcher {
   static _offline = new Map();
@@ -498,7 +482,6 @@ class MarketDataFetcher {
       ? EMBEDDED_OFFLINE_MARKET_DB : null;
   }
 
-  /** 오프라인 DB 전체 시계열(원주가 역산 완료) — 메모리 캐시 */
   static getOfflineFull(ticker) {
     const sym = this.resolveSymbol(ticker);
     if (this._offline.has(sym)) return this._offline.get(sym);
@@ -525,11 +508,6 @@ class MarketDataFetcher {
 
   static _tail = new Map();
 
-  /**
-   * 오프라인 DB 마지막 날짜 이후 빠진 최근 시세를 Yahoo 에서 보충.
-   * 겹치는 날짜의 가격 비율로 기준을 확인하고, 분할 등으로 기준이 바뀌었으면 과거 구간을 같은 비율로 보정.
-   * 실패해도 기존 데이터로 계속 계산(tailFailed 표시).
-   */
   static async withRecentTail(ticker, off) {
     const sym = this.resolveSymbol(ticker);
     if (this._tail.has(sym)) return this._tail.get(sym);
@@ -547,7 +525,7 @@ class MarketDataFetcher {
       const from = Math.floor(QuantUtils.parseDateUTC(last) / 1000) - 30 * 86400;
       const to = Math.floor(Date.now() / 1000);
       y = await YahooFinanceFetcher.fetchRange(sym, from, to);
-      if (!y) y = await YahooFinanceFetcher.fetchRange(sym, from, to); // 공개 프록시 일시 오류 대비 1회 재시도
+      if (!y) y = await YahooFinanceFetcher.fetchRange(sym, from, to);
       if (y) await QuantDataCache.set(cacheKey, { p: Array.from(y.priceMap.entries()), d: Array.from(y.divMap.entries()) });
     }
     const ratios = [];
@@ -632,7 +610,7 @@ class MarketDataFetcher {
   static _polygonAllowed() {
     const now = Date.now();
     this._polyTimes = this._polyTimes.filter(t => now - t < 60000);
-    if (this._polyTimes.length >= 5) return false; // 무료 요금제: 분당 5회
+    if (this._polyTimes.length >= 5) return false;
     this._polyTimes.push(now);
     return true;
   }
@@ -653,7 +631,6 @@ class MarketDataFetcher {
       if (!json.results || json.results.length === 0) return null;
       const pm = new Map();
       json.results.forEach(it => { if (it.c > 0) pm.set(new Date(it.t).toISOString().split('T')[0], it.c); });
-      // adjusted=true 는 분할만 반영 → 배당은 별도 수신
       const dm = new Map();
       let divsMissing = false;
       if (!isFx && !isIndex) {
@@ -721,7 +698,6 @@ class YahooFinanceFetcher {
     const closes = result.indicators?.quote?.[0]?.close || [];
     const adj = result.indicators?.adjclose?.[0]?.adjclose || [];
     const pm = new Map(), am = new Map(), dm = new Map();
-    // 거래소 현지 날짜 기준 (UTC 날짜를 쓰면 환율·아시아 종목이 하루 밀림)
     const off = Number(result.meta?.gmtoffset) || 0;
     const localDate = (t) => new Date((t + off) * 1000).toISOString().split('T')[0];
     ts.forEach((t, i) => {
@@ -735,7 +711,6 @@ class YahooFinanceFetcher {
         dm.set(d, (dm.get(d) || 0) + div.amount);
       }
     });
-    // close = 분할만 반영된 원주가. close 가 없으면 adjclose 로부터 역산
     let res;
     if (pm.size >= 3) res = PriceSeriesNormalizer.fromRaw(pm, dm);
     else if (am.size >= 3) res = PriceSeriesNormalizer.fromAdjusted(am, dm);
@@ -750,14 +725,14 @@ class YahooFinanceFetcher {
     const p1 = Math.floor(Date.UTC(startYear, 0, 1) / 1000);
     const p2 = Math.floor(Date.UTC(endYear, 11, 31, 23, 59) / 1000);
     const res = await this.fetchRange(sym, p1, p2);
-    if (res && res.priceMap.size < 20) return null; // 전체 시계열 요청에서 데이터가 너무 적으면 실패로 간주
+    if (res && res.priceMap.size < 20) return null;
     return res;
   }
 
   static async fetchRange(sym, p1, p2) {
     const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?period1=${p1}&period2=${p2}&interval=1d&events=div%2Csplit`;
     const urls = [
-      `${GLOBAL_QUANT_CONFIG.CORS_WORKER_PROXY}${encodeURIComponent(yahooUrl)}`, // 전용 워커 (cloudflare-worker/yahoo-proxy.js)
+      `${GLOBAL_QUANT_CONFIG.CORS_WORKER_PROXY}${encodeURIComponent(yahooUrl)}`,
       `https://api.allorigins.win/raw?url=${encodeURIComponent(yahooUrl)}`,
       `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(yahooUrl)}`,
       yahooUrl
@@ -817,7 +792,6 @@ class DataPipeline {
 }
 
 class CalendarBuilder {
-  /** 전략 자산 중 미국 자산이 있으면 미국 거래일, 전부 국내면 한국 거래일 달력 */
   static build(raw, strategyAssets, startBound) {
     const useUS = strategyAssets.length === 0 || strategyAssets.some(a => !QuantUtils.isDomestic(a));
     const set = new Set();
@@ -943,10 +917,7 @@ class NeweyWestHACEngine {
 }
 
 /* ----------------------------------------------------------------------------
- * 백필 합성 엔진 — 원주가/배당 배열 생성 + 상장 이전 구간 합성
- *  · 실제 데이터가 없으면 절대 합성하지 않음(기록만)
- *  · 기초자산 의존관계 순서(위상 정렬)로 처리
- *  · 기초자산 결측 시 즉시 중단(평평한 가격 채우기 금지)
+ * 백필 합성 엔진
  * -------------------------------------------------------------------------- */
 class MultiFactorSynthesisEngine {
   static process(raw, dates) {
@@ -958,7 +929,6 @@ class MultiFactorSynthesisEngine {
     const rfArr = new Float64Array(N);
     for (let i = 0; i < N; i++) rfArr[i] = HistoricalInterestRates.rfDaily(dates[i]);
 
-    // 1) 원시 배열 구성 (전일값 이월, 데이터 시작 전 0)
     for (const [key, ds] of Object.entries(raw)) {
       const P = new Float64Array(N), D = new Float64Array(N);
       const entries = Array.from(ds.priceMap.entries()).sort((a, b) => (a[0] < b[0] ? -1 : 1));
@@ -975,7 +945,6 @@ class MultiFactorSynthesisEngine {
       prices[key] = P; divs[key] = D; firstReal[key] = fr;
     }
 
-    // 2) 가격지수에 추정 분배금(분기말) 부여 → 총수익 기준 기초자산
     for (const key of Object.keys(prices)) {
       const yf = INDEX_DIVIDEND_YIELD[MarketDataFetcher.resolveSymbol(key)];
       if (!yf) continue;
@@ -985,7 +954,6 @@ class MultiFactorSynthesisEngine {
       }
     }
 
-    // 3) 위상 정렬 순서로 백필
     const done = new Set();
     const visit = (k) => {
       if (done.has(k)) return;
@@ -1012,7 +980,6 @@ class MultiFactorSynthesisEngine {
     return { tr: (P[i + 1] + D[i + 1]) / P[i] - 1, q: D[i + 1] / P[i] };
   }
 
-  /** 뒤로 한 걸음씩: (P[i+1] + D[i+1]) / P[i] = 1 + r, 합성 분배금 D[i+1] = q × P[i] */
   static _backfill(P, D, real, minIdx, stepFn) {
     let i;
     for (i = real - 1; i >= minIdx; i--) {
@@ -1024,7 +991,7 @@ class MultiFactorSynthesisEngine {
       P[i] = (P[i + 1] + (boundary ? D[i + 1] : 0)) / denom;
       if (!boundary) D[i + 1] = st.q > 0 ? st.q * P[i] : 0;
     }
-    return i + 1; // 합성 시작 인덱스
+    return i + 1;
   }
 
   static _synthesize(k, ctx) {
@@ -1034,7 +1001,6 @@ class MultiFactorSynthesisEngine {
     const P = prices[k], D = divs[k];
 
     if (cfg.proxyType === 'index_direct') {
-      // 인덱스펀드 근사: 보수를 가격·분배금에 동일 비율로 누적 차감
       let f = 1;
       const dailyFee = cfg.fee / GLOBAL_QUANT_CONFIG.TRADING_DAYS;
       for (let i = 0; i < N; i++) { P[i] *= f; D[i] *= f; f *= (1 - dailyFee); }
@@ -1042,7 +1008,7 @@ class MultiFactorSynthesisEngine {
     }
     if (!cfg.allowBackfill) return;
     const real = firstReal[k];
-    if (real <= 0) return; // 데이터 없음(-1) 또는 합성 불필요(0)
+    if (real <= 0) return;
     const minIdx = QuantUtils.lowerBound(dates, (cfg.backfillMinDate || '1985-01') + '-01');
     if (minIdx >= real) return;
     const TD = GLOBAL_QUANT_CONFIG.TRADING_DAYS;
@@ -1077,7 +1043,6 @@ class MultiFactorSynthesisEngine {
       const Y = prices[cfg.base];
       if (!Y) return;
       const C = 330;
-      // 실제 TLT 구간으로 듀레이션 보정
       let sxx = 0, sxy = 0, n = 0, sse = 0, sst = 0, sy = 0;
       const obs = [];
       for (let i = real; i < N - 1; i++) {
@@ -1088,22 +1053,33 @@ class MultiFactorSynthesisEngine {
         obs.push([-dy, yv]);
         sxx += dy * dy; sxy += -dy * yv; n++; sy += yv;
       }
-      let dur = 15.8;
-      if (n >= 250 && sxx > 0) dur = Math.min(25, Math.max(8, sxy / sxx));
+      let baseDur = 15.8;
+      if (n >= 250 && sxx > 0) baseDur = Math.min(25, Math.max(8, sxy / sxx));
       const my = n ? sy / n : 0;
-      obs.forEach(([x, y]) => { sse += (y - dur * x) ** 2; sst += (y - my) ** 2; });
+      obs.forEach(([x, y]) => { sse += (y - baseDur * x) ** 2; sst += (y - my) ** 2; });
+
+      // [보완 1] 25년 만기 액면채권 수정 듀레이션 공식을 통한 고금리 레짐 왜곡 방지
+      const modDurTheory = (yieldPct) => {
+        const y = Math.max(0.005, yieldPct / 100);
+        return (1 / y) * (1 - Math.pow(1 + y, -25));
+      };
+      const baseTheory = modDurTheory(3.8); // TLT 실측 평균 금리 ~3.8% 기준
+
       from = this._backfill(P, D, real, minIdx, (i) => {
         if (!(Y[i] > 0 && Y[i + 1] > 0)) return null;
         const dy = (Y[i + 1] - Y[i]) / 100;
         const y = Y[i] / 100;
-        return { r: -dur * dy + 0.5 * C * dy * dy + y / TD - cfg.fee / TD, q: ctx.isMonthEnd(i + 1) ? y / 12 : 0 };
+        const dEff = Math.min(25, Math.max(6, baseDur * (modDurTheory(Y[i]) / baseTheory)));
+        return {
+          r: -dEff * dy + 0.5 * C * dy * dy + y / TD - cfg.fee / TD,
+          q: ctx.isMonthEnd(i + 1) ? y / 12 : 0
+        };
       });
-      info = { method: 'bond_duration', label: `30년물 금리(^TYX) 듀레이션 모델 (D=${dur.toFixed(1)}, 볼록성 ${C}, 이표 월분배)`, duration: dur, r2: sst > 0 ? 1 - sse / sst : 0, n };
+      info = { method: 'bond_duration', label: `30년물 금리(^TYX) 금리연동 듀레이션 모델 (기준D=${baseDur.toFixed(1)}, 볼록성 ${C}, 이표 월분배)`, duration: baseDur, r2: sst > 0 ? 1 - sse / sst : 0, n };
     } else if (cfg.proxyType === 'factor') {
       if (!FactorData.available()) return;
       const model = FACTOR_MODELS[cfg.factorModel];
       if (!model) return;
-      // 실제 구간 회귀 보정
       const X = [], Yv = [];
       for (let i = real; i < N - 1; i++) {
         if (!(P[i] > 0 && P[i + 1] > 0)) continue;
@@ -1133,22 +1109,26 @@ class MultiFactorSynthesisEngine {
           r2 = sst > 0 ? 1 - sse / sst : 0;
         }
       }
-      // 실현 분배수익률 → 분기 합성 분배금
       let ySum = 0;
       for (let i = real + 1; i < N; i++) if (D[i] > 0 && P[i - 1] > 0) ySum += D[i] / P[i - 1];
       const yrs = Math.max(0.5, QuantUtils.daysBetween(dates[real], dates[N - 1]) / 365.25);
       const yieldAnn = Math.min(0.08, ySum / yrs);
-      // 잔차 블록 부트스트랩(시드 고정) — 합성 구간의 변동성 과소추정 방지, 알파는 제외(보수적)
+
+      // [보완 2] 역방향 루프에서도 캘린더 정방향의 자기상관성(시간 순서)을 유지하는 블록 부트스트랩
       const rng = QuantUtils.mulberry32(QuantUtils.hashString('factor-residual:' + k));
       const BLOCK = 10;
-      let bPos = 0, bLeft = 0;
+      let bStart = 0, bOffset = -1;
       const drawResidual = () => {
         if (!residuals || residuals.length === 0) return 0;
-        if (bLeft <= 0) { bPos = Math.floor(rng() * residuals.length); bLeft = BLOCK; }
-        const v = residuals[bPos % residuals.length];
-        bPos++; bLeft--;
+        if (bOffset < 0) {
+          bStart = Math.floor(rng() * residuals.length);
+          bOffset = BLOCK - 1; // 블록의 미래(끝)부터 거꾸로 꺼내어 정방향 시간순서 일치
+        }
+        const v = residuals[(bStart + bOffset) % residuals.length];
+        bOffset--;
         return v;
       };
+
       from = this._backfill(P, D, real, minIdx, (i) => {
         const row = FactorData.row(dates[i + 1]);
         if (!row || row.rf === null) return null;
@@ -1172,7 +1152,6 @@ class MultiFactorSynthesisEngine {
 }
 
 class DataAvailability {
-  /** 시작 인덱스 s 시점에 데이터가 없는 자산 목록 */
   static check(keys, processed, dates, s) {
     const out = [];
     keys.forEach(k => {
@@ -1187,7 +1166,7 @@ class DataAvailability {
 }
 
 /* ----------------------------------------------------------------------------
- * FIFO 세무 로트 (한국 해외주식 양도세: 선입선출, 원화 환산 손익)
+ * FIFO 세무 로트 관리자
  * -------------------------------------------------------------------------- */
 class FIFOTaxLotManager {
   constructor() { this.lots = []; this.head = 0; }
@@ -1196,7 +1175,6 @@ class FIFOTaxLotManager {
     if (shares > 0 && isFinite(costPerShareKrw)) this.lots.push({ shares, cost: costPerShareKrw });
   }
 
-  /** FIFO 매도 → 실현손익(원) */
   sell(shares, proceedsPerShareKrw) {
     let rem = shares, realized = 0;
     while (rem > 1e-12 && this.head < this.lots.length) {
@@ -1210,16 +1188,20 @@ class FIFOTaxLotManager {
     return realized;
   }
 
-  /** 목표 실현이익에 도달하기 위한 FIFO 매도 수량 계획 */
+  // [보완 3] 손실 로트 매도로 인한 취득단가 왜곡(Negative Basis Step-Up) 방지
   planHarvest(targetGain, proceedsPerShareKrw) {
     let cum = 0, sh = 0;
     for (let k = this.head; k < this.lots.length; k++) {
       const lot = this.lots[k];
       const g = proceedsPerShareKrw - lot.cost;
+      if (g <= 0) break; // 앞선 로트가 손실 상태면 비과세 절세 매도-재매수 중단
       const lotGain = lot.shares * g;
-      if (g > 0 && cum + lotGain > targetGain) { sh += (targetGain - cum) / g; cum = targetGain; break; }
+      if (cum + lotGain >= targetGain) {
+        sh += (targetGain - cum) / g;
+        cum = targetGain;
+        break;
+      }
       cum += lotGain; sh += lot.shares;
-      if (cum >= targetGain) break;
     }
     return { shares: sh, gain: cum };
   }
@@ -1232,7 +1214,7 @@ class FIFOTaxLotManager {
 }
 
 /* ----------------------------------------------------------------------------
- * XIRR (Newton + 이분법)
+ * XIRR 연산기
  * -------------------------------------------------------------------------- */
 class XIRRSolver {
   static compute(flows, flowDates, finalVal, finalDate) {
@@ -1275,11 +1257,7 @@ class XIRRSolver {
 }
 
 /* ----------------------------------------------------------------------------
- * 포트폴리오 시뮬레이터 — 개별 자산(100%)과 믹스를 동일 엔진으로 처리
- *  · 원주가 + 배당 재투자(원천징수 차감), 통화별 현금(KRW/USD)
- *  · 환전은 필요한 순금액만(스프레드), 매매수수료, 국내주식 거래세
- *  · 해외자산 양도세: FIFO 로트, 연말 절세(250만 공제 한도 내 실현 후 재매수), 초과분 22% 과세
- *  · TWR은 거래비용/세금까지 반영(외부 입금만 제외)
+ * 포트폴리오 시뮬레이터
  * -------------------------------------------------------------------------- */
 class PortfolioSimulator {
   static shouldRebalance(freq, dateStr) {
@@ -1332,7 +1310,6 @@ class PortfolioSimulator {
       return v;
     };
 
-    // KRW↔USD 순환전 후 목표 매수 체결
     const executeBuys = (i, needN) => {
       let costUSD = 0, costKRW = 0;
       for (let a = 0; a < n; a++) if (needN[a] > 0) { if (isUS[a]) costUSD += needN[a] * (1 + fee); else costKRW += needN[a] * (1 + fee); }
@@ -1372,7 +1349,7 @@ class PortfolioSimulator {
       const realized = lots[a].sell(sh, (proceeds / sh) * fxA(a));
       if (isUS[a]) { cashUSD += proceeds; return realized; }
       cashKRW += proceeds;
-      return 0; // 국내주식 소액주주 양도세 비과세
+      return 0;
     };
 
     const trade = (i, mode) => {
@@ -1397,9 +1374,8 @@ class PortfolioSimulator {
       executeBuys(i, needN);
     };
 
+    // [보완 4] 당해 연도 세무 완결 후 yearRealized 초기화 (익년도 이월 및 공제 한도 왜곡 차단)
     const yearEndTax = (i) => {
-      let carry = 0;
-      // 1) 절세 매도-재매수 (공제 한도 내 이익 실현, 미국자산은 달러로 재매수 → 환전 없음)
       for (let a = 0; a < n; a++) {
         if (!isUS[a] || shares[a] <= 0) continue;
         const remaining = C.TAX_ALLOWANCE_KRW - yearRealized;
@@ -1419,7 +1395,7 @@ class PortfolioSimulator {
         lots[a].buy(newSh, p * (1 + fee) * fxi);
         feesPaid += (sh * p * fee + newSh * p * fee) * fxi;
       }
-      // 2) 공제 초과분 과세 (현금 → 부족 시 비례 매도; 매도 손익은 다음 해로 이월)
+
       if (yearRealized > C.TAX_ALLOWANCE_KRW) {
         let tax = (yearRealized - C.TAX_ALLOWANCE_KRW) * C.TAX_RATE;
         taxesPaid += tax;
@@ -1436,7 +1412,7 @@ class PortfolioSimulator {
             const frac = Math.min(1, tax * 1.01 / invVal);
             for (let a = 0; a < n; a++) {
               if (shares[a] <= 0) continue;
-              carry += sellShares(a, i, shares[a] * frac);
+              sellShares(a, i, shares[a] * frac);
             }
             const fromK = Math.min(cashKRW, tax); cashKRW -= fromK; tax -= fromK;
             if (tax > 0 && cashUSD > 0) {
@@ -1446,13 +1422,12 @@ class PortfolioSimulator {
           }
         }
       }
-      yearRealized = carry;
+      yearRealized = 0; // 과세연도 완결 후 리셋
     };
 
     for (let i = s; i <= e; i++) {
       const t = i - s;
       fxi = ctx.fx[i];
-      // 1) 배당: 원천징수 후 동일 통화로 재투자
       for (let a = 0; a < n; a++) {
         const D = Dv[a][i];
         const p = P[a][i];
@@ -1468,10 +1443,8 @@ class PortfolioSimulator {
           feesPaid += sh * p * fee * fxA(a);
         }
       }
-      // 2) 입금 전 평가 → TWR
       const pre = valueNow(i);
       twr[t] = t === 0 ? 1 : (postPrev > 0 ? twr[t - 1] * (pre / postPrev) : twr[t - 1]);
-      // 3) 월 첫 거래일: 입금 + 매수/리밸런싱
       let dep = 0;
       if (t === 0 || ctx.isNewMonth[i]) {
         monthCounter++;
@@ -1484,9 +1457,7 @@ class PortfolioSimulator {
         if (reb) trade(i, 'rebalance');
         else if (cashKRW + cashUSD * fxi > 1) trade(i, 'invest');
       }
-      // 4) 연말 세무 처리
       if (config.taxEnabled && ctx.isYearEnd[i] && i < e) yearEndTax(i);
-      // 5) 사후 평가 (거래비용·세금은 TWR 손실로 반영)
       const post = valueNow(i);
       values[t] = post;
       invested[t] = investedKrw;
@@ -1496,23 +1467,23 @@ class PortfolioSimulator {
       postPrev = post;
     }
 
-    // 최종 청산(세후 모드): 매도수수료·거래세·환전스프레드·양도세 반영
+    // [보완 5] 최종 청산 시 당해 연도 누적 실현손익과 미실현손익을 합산하여 연 250만 원 공제 정합성 유지
     const grossFinal = values[len - 1];
     let finalVal = grossFinal, liquidationTax = 0, liquidationCost = 0;
     if (config.taxEnabled) {
       fxi = ctx.fx[e];
-      let proceedsKrw = 0, gain = yearRealized;
+      let proceedsKrw = 0, finalYearNetGain = yearRealized;
       for (let a = 0; a < n; a++) {
         if (shares[a] <= 0) continue;
         const notional = shares[a] * P[a][e];
         const net = notional * (1 - fee) - (isKrSt[a] ? notional * C.KR_STOCK_SELL_TAX : 0);
         if (isUS[a]) {
-          gain += lots[a].unrealized((net / shares[a]) * fxi);
+          finalYearNetGain += lots[a].unrealized((net / shares[a]) * fxi);
           proceedsKrw += net * fxi * (1 - spread);
         } else proceedsKrw += net;
       }
       proceedsKrw += cashKRW + cashUSD * fxi * (1 - spread);
-      liquidationTax = Math.max(0, gain - C.TAX_ALLOWANCE_KRW) * C.TAX_RATE;
+      liquidationTax = Math.max(0, finalYearNetGain - C.TAX_ALLOWANCE_KRW) * C.TAX_RATE;
       liquidationCost = Math.max(0, grossFinal - proceedsKrw);
       finalVal = proceedsKrw - liquidationTax;
     }
@@ -1525,7 +1496,7 @@ class PortfolioSimulator {
 }
 
 /* ----------------------------------------------------------------------------
- * 성과/위험 지표
+ * 기관급 성과/위험 분석기
  * -------------------------------------------------------------------------- */
 class InstitutionalAnalyticsEngine {
   static analyze(port, bench, rf, ppy) {
@@ -1600,7 +1571,7 @@ class InstitutionalAnalyticsEngine {
 }
 
 /* ----------------------------------------------------------------------------
- * Fama-French 5 + 모멘텀 회귀 (달러 기준 수익률, Newey-West HAC)
+ * Fama-French 5팩터 + 모멘텀 회귀
  * -------------------------------------------------------------------------- */
 class FamaFrenchEngine {
   static solve(usdRets, retDates, proxy) {
@@ -1675,7 +1646,7 @@ class FamaFrenchEngine {
 }
 
 /* ----------------------------------------------------------------------------
- * 몬테카를로 — 월간 수익률 순환 블록 부트스트랩, 시드 고정(재현 가능)
+ * 몬테카를로 부트스트랩 엔진
  * -------------------------------------------------------------------------- */
 class MonteCarloEngine {
   static run(monthlyR, monthlyDep, seed, iterations = GLOBAL_QUANT_CONFIG.MC_ITERATIONS) {
@@ -1698,7 +1669,7 @@ class MonteCarloEngine {
 }
 
 /* ----------------------------------------------------------------------------
- * 5축 퀀트 점수 (수익성 · 하방효율 · 고통방어 · 꼬리위험 · 경로안정성)
+ * 5축 퀀트 점수 산출기
  * -------------------------------------------------------------------------- */
 class QuantScoreEngine {
   static WEIGHTS = { w1: 0.25, w2: 0.25, w3: 0.20, w4: 0.15, w5: 0.15 };
@@ -1712,11 +1683,10 @@ class QuantScoreEngine {
   static painFactor(ulcer, mdd) {
     const zU = (ulcer - 3.0) / 2.5, zM = (mdd - 20.0) / 12.0;
     const c = 0.70710678;
-    const pc1 = c * zU + c * zM, pc2 = c * zU - c * zM; // 45° 회전 (고통 크기 / 지속-깊이 차이)
+    const pc1 = c * zU + c * zM, pc2 = c * zU - c * zM;
     return Math.min(1, Math.max(0, Math.exp(-0.35 * Math.max(0, pc1) - 0.25 * Math.max(0, pc2))));
   }
 
-  /** 총점 + 축별 기여도 (기여도 합 = 총점) */
   static calculate(res, periodMonths, rfAnnPct) {
     const num = (v, d = 0) => (v === undefined || v === null || isNaN(v) ? d : v);
     const xirr = num(res.annualizedXIRR), sortino = Math.max(0, num(res.sortino)), omega = Math.max(0, num(res.omega));
@@ -1756,7 +1726,7 @@ class QuantScoreEngine {
 }
 
 /* ----------------------------------------------------------------------------
- * 백테스트 실행기: 컨텍스트 구성 → 전략 시뮬레이션 → 지표/회귀/MC/점수
+ * 백테스트 실행기
  * -------------------------------------------------------------------------- */
 class BacktestRunner {
   static buildContext(dates, processed, fxData, s, e) {
@@ -1783,7 +1753,6 @@ class BacktestRunner {
     return { dates, prices: processed.prices, divs: processed.divs, synthInfo: processed.synthInfo, fx, rf, isNewMonth, isYearEnd, s, e, ppy, fxApprox, fxMissing, firstFxDate };
   }
 
-  /** 자산의 달러 기준 총수익 일간수익률 (i → i+1) */
   static usdTR(ctx, key, s, e) {
     const P = ctx.prices[key], D = ctx.divs[key];
     if (!P) return null;
@@ -1833,7 +1802,6 @@ class BacktestRunner {
     const xirr = XIRRSolver.compute(sim.flows, sim.flowDates, sim.finalVal, ctx.dates[e]);
     const ff = extra.skipFF ? FamaFrenchEngine.empty('생략') : FamaFrenchEngine.solve(usd, retDates, extra.proxyUsd);
 
-    // 월간 TWR 수익률 + 월 입금 (몬테카를로 입력)
     const monthlyR = [], monthlyDep = [];
     let prevEnd = 1, depIdx = 0;
     for (let t = 0; t < len; t++) {
@@ -1886,9 +1854,6 @@ class BacktestRunner {
 
 /* ----------------------------------------------------------------------------
  * AI 최적화기
- *  1단계: 워커에서 고속 스크리닝(리밸런싱 주기·적립 방식 동일 반영)
- *  2단계: 상위 후보를 실제 엔진으로 재채점(세금·수수료·환율·MC 포함)
- *  3단계: 학습(70%) / 검증(30%) 분리 — 표본 외 성과 제시
  * -------------------------------------------------------------------------- */
 function __fastSim(rets, idx, w, N, monthFlag, rebalFlag, isDCA, ppy, rfMean, buf) {
   const k = idx.length;
@@ -2085,7 +2050,6 @@ class PortfolioOptimizerEngine {
       monthFlag: trFlags.mf, rebalFlag: trFlags.rb, isDCA, ppy: ctx.ppy, rfMean: rfMeanOf(s, trainE), anchors
     });
 
-    // 2단계: 실제 엔진 재채점
     const cand = new Map();
     Object.values(screen.lists).forEach(list => list.forEach(it => {
       const alloc = {};
@@ -2114,7 +2078,6 @@ class PortfolioOptimizerEngine {
       maxReturn: pick((a, b) => a.annualizedXIRR > b.annualizedXIRR)
     };
 
-    // 3단계: 표본 외 검증
     let teFlags = null, teRets = null, teRf = 0;
     if (hasTest) {
       teFlags = flags(trainE, e);
